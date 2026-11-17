@@ -18,7 +18,8 @@
     "db:down": "podman compose down"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "1.4.2",
+    "@types/node": "24.2.1",
     "typescript": "5.9.3"
   },
   "resolutions": {
