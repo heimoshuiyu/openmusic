@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # 依赖类型钉在根 package.json / bun.lock；冻结安装可拦住解析漂移
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run test:unit
+      # 说明：Android 构建需要 SDK 与本机工具链，暂不进 CI；
+      # 服务端/前端类型与单测已覆盖大部分回归面。
