@@ -2,7 +2,7 @@
 
 > 状态：设计稿（2026-09-19，待用户确认后实施）
 > 关联：docs/01 §6.3（AI 搜索扩展点）、docs/03 §2.7（plays 事实日志 = AI 数据基底）、docs/06 P2（语义搜索）。
-> 上游事实源：OpenCode V2 文档（opencode.ai/v2/docs/build/sdk 等）+ 本地源码检出 `~/opencode`（项目 reference `opencode`）。
+> 上游事实源：OpenCode V2 文档（opencode.ai/v2/docs/build/sdk 等）+ vendored 源码包说明（`vendor/opencode/README.md`）。
 
 ## 1. 定位：什么叫「AI-native 的 OpenMusic」
 
@@ -151,7 +151,7 @@ Web / Android 0.1.13 的听写走 `POST /api/v1/agent/sessions/:id/transcribe`�
 
 - **A0 工具面 + Port（无 LLM 依赖）✅ 2026-09-19**：`service/agent/tools.ts` 工具注册表（纯 Effect，可直接单测/集成测）+ `AgentService` 接口 + 空实现；`bun run check` 全绿。这是「AI-native 重构」的地基，可独立合并。
 - **A1 内嵌宿主 ✅ 2026-09-19**：`embedded.ts`（SDK Promise 边界 + music 插件 + scratch Location + 独立 sqlite 会话库 `data/agent-sessions.db` + 内联 provider 配置）+ `/api/v1/agent` group + SSE 事件流 + 集成测试（真 SDK 宿主 + mock OpenAI 兼容 provider：工具分发 → 身份反查 → 真库执行 → 结果回传 → 回复，全链）；
-- **A2 Web 聊天 ✅ 2026-09-19**：`apps/web/src/agent/`（store + 抽屉）：SSE 单例懒连接、`message.updated` 流式渲染、工具活动状态条（tool.input/success/failed 事件）、clientAction 确认卡片（play_now/enqueue 结果经确认后拉全量 Track 本地执行）、会话切换/新建/打断；侧栏「音乐助手」入口 + Ctrl+J；真实模型（OpenCode Zen / glm-5.3-flash）端到端验证；
+- **A2 Web 聊天 ✅ 2026-09-19**：`apps/web/src/agent/`（store + 抽屉）：SSE 单例懒连接、`message.updated` 流式渲染、工具活动状态条（tool.input/success/failed 事件）、clientAction 确认卡片（play_now/enqueue 结果经确认后拉全量 Track 本地执行）、会话切换/新建/打断；侧栏「音乐助手」入口 + Ctrl+J；真实模型（OpenCode Zen / glm-5.3-flash，当时所用）端到端验证；
 - **A3 画像槽位 + 探索面 ✅ 2026-09-19**（方案两次转向后的落地形态，见 §7 决策 5-7）：收听画像经 **instruction 槽位**注入（`sessions.instructions.entry.put`，缓存友好）+ `music_facets` 库词表工具 + `music_search` 结构化过滤（genre/年代/artistId/sortBy=plays）+ **music-exploration 探索技能**（skill 文件，热刷新，教 agent 自主探索与可解释推荐）。
   - ~~原案：pgvector 语义检索 + `session.hook("context")` 画像注入~~（均被否决，理由见 §7）
 
@@ -161,7 +161,7 @@ Web / Android 0.1.13 的听写走 `POST /api/v1/agent/sessions/:id/transcribe`�
 
 1. **会话持久化 = SQLite 落盘**：`data/agent-sessions.db`，专用文件，不与宿主机正在运行的 OpenCode 服务共库（隔离论证见 §3.3）；
 2. **凭据 = 独立配置**：`config.content` 内联，provider key 来自 OpenMusic 自己的配置面，不复用 `~/.config/opencode`；
-3. **首个真实 provider = OpenCode Zen**（`https://opencode.ai/zen/v1`，OpenAI 兼容）：`data/agent-config.json` 定义 provider+model（glm-5.3-flash，capabilities.tools 显式开），key 走 `{env:OPENMUSIC_ZEN_API_KEY}`（apps/server/.env）。
+3. **首个真实 provider = OpenCode Zen**（`https://opencode.ai/zen/v1`，OpenAI 兼容）：`data/agent-config.json` 定义 provider+model（glm-5.3-flash，capabilities.tools 显式开），key 走 `{env:OPENMUSIC_ZEN_API_KEY}`（apps/server/.env）。（历史记录：静态 Key 方案已在公开版移除，凭据现于管理页配置 provider。）
 
 追加决策（2026-09-19，A3）：
 

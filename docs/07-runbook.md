@@ -22,7 +22,7 @@
 ```bash
 systemctl --user status openmusic-server openmusic-web   # 看状态
 systemctl --user restart openmusic-server                # 重启后端
-journalctl --user -u openmusic-server -f                 # 跟日志（原 /tmp 重定向作废）
+journalctl --user -u openmusic-server -f                 # 跟日志
 # 服务文件：~/.config/systemd/user/openmusic-{server,web}.service（dev watch 模式）
 ```
 

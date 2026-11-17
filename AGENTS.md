@@ -8,7 +8,7 @@
 
 | 要查什么 | 去哪 |
 |---|---|
-| 启动/停止/凭据/备份/排障 | `docs/07-runbook.md`（运行手册，含本机端口与代理事实） |
+| 启动/停止/凭据/备份/排障 | `docs/07-runbook.md`（运行手册：部署示例与排障） |
 | API 规范 | `docs/04-api-design.md`；OpenAPI：运行时 `/api/docs` |
 | Subsonic/Feishin 兼容 | `docs/05-subsonic-compat.md` |
 | 数据模型/迁移 | `docs/03-data-model.md` + `apps/server/src/db/migrations/` |
@@ -173,7 +173,7 @@ docs/              # 设计文档（决策的事实源）
 - **打点规则**（>50% 或 >240s，播完兜底）在 `PlaybackService.maybeScrobble`，与 web/TUI 判定一致；监听秒数取触发瞬间进度
 - **解码失败回退**：`onPlayerError` → 同曲换 `?format=mp3&maxBitRate=320` 重试一次（每曲限一次，`transcoded` 集合防循环）
 - **`setWakeMode(C.WAKE_MODE_NETWORK)` 必须声明 `android.permission.WAKE_LOCK`**——漏了会在起播瞬间 SecurityException 崩掉（播放线程，不弹窗直接死）
-- **大半径 `Modifier.blur`（>~40dp）在低端 GPU（Adreno 610 实测）整个图层渲染为空**——环境晕染不要用 RenderEffect blur，改「全尺寸封面 graphicsLayer(scale 1.4, alpha 0.35) 放大铺底 + 渐变压暗」；同理 `ImageRequest.Builder.size(40)` 小图请求在该机型上也不渲染（原因未深究），直接传 URL 字符串
+- **大半径 `Modifier.blur`（>~40dp）在低端 GPU 上整个图层渲染为空**——环境晕染不要用 RenderEffect blur，改「全尺寸封面 graphicsLayer(scale 1.4, alpha 0.35) 放大铺底 + 渐变压暗」；同理 `ImageRequest.Builder.size(40)` 小图请求在低端 GPU 上也不渲染（原因未深究），直接传 URL 字符串
 - **coil3 单例**：Application 实现 `coil3.SingletonImageLoader.Factory`（方法是 `newImageLoader(Context)`），Compose 的 AsyncImage 自动取用；没有 `coil3.compose.LocalImageLoader`
 - **测试方式（无视觉环境）**：`adb exec-out screencap -p` + Python PIL 采样像素（背景 shell 色/红进度/白播放键/晕染均值），`adb shell uiautomator dump` + adb pull 拿无障碍树（文本/bounds）定位控件；tap 坐标从 dump 算——手猜必错
 - **Compose 手写图标**：`OmIcons` 用 `addPathNodes("M2 18h1.4...")` 解析 lucide SVG path（`PathParser` 不是公开 API）；stroke/fill 参数要 `SolidColor`（`Brush`），tint 靠 Icon 的 ColorFilter 整体替换

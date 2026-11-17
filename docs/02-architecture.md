@@ -305,6 +305,8 @@ cacheKey = sha256(trackId + format + maxBitRate + 音频指纹参数)
 | `LOG_LEVEL` | `info` | |
 | `OPENMUSIC_ADMIN_USER` / `OPENMUSIC_ADMIN_PASSWORD` | — | 首次启动且无用户时创建管理员；密码缺省则生成随机密码并打印一次 |
 | `MUSIC_FOLDERS` | — | 首启种子（逗号分隔绝对路径）；music_folder 表为主，此后以 API 管理为准 |
+| `OPENMUSIC_SECRET` | — | Subsonic 凭据加密密钥（≥16 字符）；缺省首启生成 `DATA_DIR/secret.key`（后果见 docs/07 §3） |
+| `AGENT_ENABLED` / `AGENT_CONFIG` | `false` / `<DATA_DIR>/agent-config.json` | AI 助手开关与独立配置文件（docs/08） |
 
 ## 8. 本地开发与部署
 
@@ -314,7 +316,7 @@ cacheKey = sha256(trackId + format + maxBitRate + 音频指纹参数)
 podman compose up -d db        # postgres:17-alpine, 端口 5432
 bun install
 bun run --filter @openmusic/server dev   # :3000，watch 模式
-bun run --filter @openmusic/web dev      # :5173，proxy /api /rest → :3000
+bun run --filter @openmusic/web dev      # :5175，proxy /api /rest → :3000
 ```
 
 ### 8.2 Prod（podman compose）
