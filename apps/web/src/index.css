@@ -1,0 +1,171 @@
+/* Record index: the site, assistant and player share a print-like grid and system palette. */
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+@theme {
+  --color-shell: light-dark(#fff, #0c0c0c);
+  --color-panel: light-dark(#f8f8f8, #141414);
+  --color-raised: light-dark(#ededed, #242424);
+  --color-line: light-dark(#d7d7d7, #383838);
+  --color-paper: light-dark(#191919, #f1f1f1);
+  --color-dim: light-dark(#505050, #bbb);
+  --color-faint: light-dark(#676767, #aaa);
+  --color-accent: light-dark(#3454df, #80a5ff);
+  --color-accent-deep: light-dark(#253ea8, #a7c2ff);
+  --color-danger: light-dark(#ae2e27, #ff9089);
+  --radius-md: 2px;
+  --radius-lg: 3px;
+
+  --font-sans:
+    "Inter Variable", -apple-system, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-display: var(--font-sans);
+  --font-readout: ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", monospace;
+}
+
+:root {
+  color-scheme: light dark;
+  --label-blue: #3b5cf6;
+  --record: #191919;
+  --blue-wash: color-mix(in srgb, var(--color-accent) 8%, var(--color-shell));
+  --rail-width: clamp(14rem, 22vw, 18rem);
+  --rail-edge: clamp(1rem, 1.8vw, 1.75rem);
+  --page-inset: clamp(1rem, 3.5vw, 4rem);
+}
+
+/* 触屏分流：hoverable: 前缀只在支持 hover 的指针设备生效——
+ * 桌面保持 hover 显隐（如列表行操作按钮），触屏端常显可点 */
+@custom-variant hoverable {
+  @media (hover: hover) {
+    @slot;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-shell);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@layer base {
+  input,
+  button,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 70%, transparent);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-faint);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 75%, transparent);
+  outline-offset: 2px;
+}
+
+/* 时间码/计数：等宽数字（Inter 的 tnum 特性） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-readout);
+}
+
+/* 正在播放页：黑胶旋转 */
+@keyframes disc-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.disc-spin {
+  animation: disc-rotate 18s linear infinite;
+}
+.disc-paused {
+  animation-play-state: paused;
+}
+
+/* 正在播放 sheet：松手 snap 曲线（iOS sheet 手感）；拖动期 data-dragging
+ * 摘掉过渡做 1:1 跟手。visibility 延迟随行——收起滑出后再退出可访问树 */
+.np-sheet {
+  transition:
+    transform 380ms cubic-bezier(0.32, 0.72, 0.33, 1),
+    visibility 0s 380ms;
+  will-change: transform;
+}
+.np-sheet[data-dragging] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-sheet {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* 播放中的曲目指示（三根跳动的杆） */
+@keyframes eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.eq-bar {
+  transform-origin: bottom;
+  animation: eq-bounce 0.9s ease-in-out infinite;
+}
+
+/* 扫描 walking 阶段的不确定态进度（总量未知，total 随发现增长） */
+@keyframes scan-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.scan-indeterminate {
+  animation: scan-indeterminate 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disc-spin {
+    animation: none;
+  }
+  .eq-bar {
+    animation: none;
+  }
+  .scan-indeterminate {
+    animation: none;
+  }
+}

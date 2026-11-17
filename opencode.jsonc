@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["-opencode.config.instruction"],
+  "permissions": [
+    { "action": "skill", "resource": "handoff", "effect": "deny" }
+  ],
+  "references": {
+    "opencode": {
+      "path": "~/opencode",
+      "description": "OpenCode 源码检出（server/TUI/SDK/packages）。Effect SDK、插件协议、客户端 API 的实现事实源；做 AI agent 集成或对照官方实现时查这里"
+    }
+  }
+}

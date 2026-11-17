@@ -1,0 +1,40 @@
+services:
+  db:
+    image: docker.io/library/postgres:17-alpine
+    container_name: openmusic-db
+    environment:
+      POSTGRES_USER: openmusic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a database password in .env}
+      POSTGRES_DB: openmusic
+    ports:
+      - "127.0.0.1:${OPENMUSIC_DB_PORT:-5433}:5432"
+    volumes:
+      - openmusic-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmusic -d openmusic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: openmusic-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://openmusic:${POSTGRES_PASSWORD:?Set a database password in .env}@db:5432/openmusic
+      DATA_DIR: /data
+      TRANSCODE_CACHE_DIR: /tmp/openmusic/transcode
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - openmusic-data:/data
+      # 音乐库只读挂载（按需修改路径）：
+      # - /path/to/music:/music:ro
+
+volumes:
+  openmusic-pgdata:
+  openmusic-data:

@@ -1,0 +1,15 @@
+.git
+**/.env
+**/.env.*
+bunfig.toml
+**/node_modules
+**/dist
+**/build
+**/.gradle
+apps/server/data
+data
+**/keystore.properties
+**/*.jks
+**/*.keystore
+**/*.apk
+**/*.bundle

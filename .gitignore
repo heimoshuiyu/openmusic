@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+.data/
+# 锚定：只忽略服务端运行时数据目录——未锚定的 `data/` 曾把 android 的 data 包整个静默排除出版本库
+/apps/server/data/
+# 仓库根的杂散运行时目录（某次从根误启动 server 的遗留，勿删文件仅忽略）
+/data/
+# 转码缓存默认在仓库外的 /tmp/openmusic/transcode（绝对路径，git 不可见）；
+# 此两行防御「缓存路径被配成仓库内相对路径」的误配置场景
+/tmp/openmusic/
+*.part
+.env
+.env.*
+!.env.example
+/bunfig.toml
+*.jks
+*.keystore
+*.p12
+*.apk
+*.aab
+*.bundle
+*.log
+/tmp/
+.DS_Store
+coverage/

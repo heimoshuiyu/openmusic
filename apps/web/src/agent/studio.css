@@ -1,0 +1,103 @@
+/* Chat-specific layout. Palette, brand and index layout tokens come from the Web shell. */
+.music-studio {
+  --edge: clamp(1.5rem, 4vw, 4rem);
+  --measure: 55rem;
+  background: var(--color-shell);
+  color: var(--color-paper);
+}
+.music-studio :focus-visible { outline-color: var(--color-accent); }
+.music-studio ::selection { background: var(--label-blue); color: white; }
+.studio-rail { width: var(--rail-width); border-inline-end: 1px solid var(--color-line); }
+.studio-brand, .studio-back { display: flex; align-items: center; gap: .65rem; padding-inline: var(--rail-edge); }
+.studio-brand { min-height: 5rem; }
+.studio-back { padding-block: 1rem; border-block-start: 1px solid var(--color-line); font-size: .8125rem; color: var(--color-dim); }
+.studio-new, .studio-primary { background: var(--color-paper); color: var(--color-shell); font-size: .875rem; font-weight: 600; }
+.studio-new { display: flex; justify-content: space-between; align-items: center; margin: .75rem var(--rail-edge) 1.75rem; padding: .7rem .85rem; }
+.studio-primary { margin-top: 1.5rem; padding: .7rem 1.25rem; }
+.studio-new:disabled, .studio-primary:disabled { opacity: .5; }
+.studio-index-title { display: flex; align-items: baseline; justify-content: space-between; margin-inline: var(--rail-edge); padding-bottom: .65rem; border-bottom: 1px solid var(--color-line); font-size: .8125rem; color: var(--color-dim); }
+.studio-index-title span, .studio-index-no, .studio-window-name, .studio-toolbar time, .studio-keys kbd { font-family: var(--font-readout); font-variant-numeric: tabular-nums; }
+.studio-index { padding: .5rem 0 1rem; }
+.studio-index-link { display: flex; align-items: baseline; gap: .7rem; border-inline-start: 3px solid transparent; padding: .7rem var(--rail-edge) .7rem calc(var(--rail-edge) - 3px); font-size: .875rem; color: var(--color-dim); }
+.studio-index-no { flex-shrink: 0; font-size: .75rem; color: var(--color-faint); }
+.studio-index-link[data-selected] { background: var(--blue-wash); border-color: var(--color-accent); color: var(--color-paper); font-weight: 600; }
+.studio-index-link[data-selected] .studio-index-no { color: var(--color-accent); }
+.studio-measure { width: 100%; max-width: var(--measure); margin-inline: auto; }
+.studio-head, .studio-thread, .studio-dock { padding-inline: var(--edge); }
+.studio-head { flex: none; padding-top: clamp(.6rem, 1.5vh, 1.25rem); }
+.studio-head > div { padding-bottom: clamp(.65rem, 2vh, 1.5rem); border-bottom: 1px solid var(--color-paper); }
+.studio-toolbar, .studio-pop { display: flex; align-items: center; gap: .65rem; }
+.studio-toolbar { min-height: 2.25rem; color: var(--color-dim); font-size: .8125rem; }
+.studio-toolbar time { font-size: .75rem; color: var(--color-faint); }
+.studio-status { color: var(--color-accent); }
+.studio-pop { margin-left: auto; color: var(--color-accent); min-height: 2.25rem; padding-inline: .4rem; }
+.studio-head h1 { font-weight: 600; font-size: clamp(1.4rem, 2.6vw, 2.15rem); line-height: 1.35; letter-spacing: -.04em; margin-top: .35rem; }
+.studio-thread { padding-block: 1.25rem; overscroll-behavior: contain; }
+.studio-entry { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: 1rem; padding-block: .4rem; }
+.studio-entry[data-start] { padding-top: 1.25rem; }
+.studio-entry[data-author="user"] { padding-bottom: 1.25rem; }
+.studio-entry[data-author="user"]:not(:first-child) { margin-top: 1.2rem; border-top: 1px solid var(--color-line); }
+.studio-author { align-self: start; padding-top: .25rem; font-size: .75rem; font-weight: 600; color: var(--color-faint); }
+.studio-entry[data-author="assistant"] .studio-author { color: var(--color-accent); }
+.studio-content { grid-column: 2; min-width: 0; font-size: .975rem; line-height: 1.75; overflow-wrap: anywhere; }
+.music-studio .assistant-markdown { font-size: inherit; line-height: inherit; }
+.music-studio .assistant-markdown a { color: var(--color-accent); }
+.studio-content details { background: var(--color-panel); border-left: 2px solid var(--color-line); padding: .25rem .65rem; }
+.studio-content details[open] { padding-bottom: .65rem; }
+.studio-welcome { padding-block: clamp(1.25rem, 6vh, 4rem); }
+.studio-intro { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.studio-intro h2 { font-size: clamp(1.8rem, 3.8vw, 3.4rem); line-height: 1.2; font-weight: 580; letter-spacing: -.065em; }
+.studio-intro p { margin-top: .85rem; color: var(--color-dim); font-size: .94rem; line-height: 1.65; }
+.studio-sleeve { width: clamp(6rem, 13vw, 11rem); flex-shrink: 0; }
+.studio-prompts { margin-top: clamp(1.5rem, 4vh, 3rem); border-top: 1px solid var(--color-line); }
+.studio-prompts button { display: grid; grid-template-columns: 3.5rem minmax(0,1fr) 1rem; gap: 1rem; align-items: center; width: 100%; min-height: 3rem; text-align: left; border-bottom: 1px solid var(--color-line); }
+.studio-prompts span { color: var(--color-faint); font-size: .8125rem; }
+.studio-prompts strong { font-size: .9375rem; font-weight: 500; }
+.studio-prompts svg { color: var(--color-accent); }
+.studio-dock { padding-block: .6rem 1rem; }
+.studio-editor { padding: .4rem; background: var(--color-panel); border: 1px solid var(--color-faint); border-inline-start: 3px solid var(--color-paper); }
+.studio-editor:focus-within { border-color: var(--color-accent); }
+.studio-editor textarea { font-size: 1rem; }
+.studio-send { background: var(--color-paper); color: var(--color-shell); }
+.studio-send:disabled { color: var(--color-faint); background: var(--color-raised); }
+.studio-keys { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-top: .55rem; color: var(--color-faint); font-size: .75rem; }
+.studio-keys kbd { color: var(--color-dim); }
+.studio-window { border: 1px solid var(--color-faint); border-radius: 4px; box-shadow: 0 3px 12px #0003, 0 12px 35px #0002; }
+.studio-window-bar { background: var(--color-paper); color: var(--color-shell); }
+.studio-window-bar button { color: inherit; }
+.studio-window-bar :focus-visible { outline-offset: -3px; }
+.studio-window-name { font-size: 1.05rem; letter-spacing: -.07em; }
+@media (hover:hover) {
+  .studio-index-link:hover, .studio-prompts button:hover, .studio-back:hover { background: var(--color-panel); color: var(--color-accent); }
+  .studio-pop:hover { text-decoration: underline; }
+  .studio-window-bar button:hover { background: var(--color-dim); color: var(--color-shell); }
+}
+/* Compactness follows the panel, not the browser's width: the floater is always its own column. */
+.studio-body { container: studio / inline-size; }
+@container studio (max-width: 34rem) {
+  .studio-head, .studio-thread, .studio-dock { padding-inline: 1rem; }
+  .studio-thread { padding-block: .65rem; }
+  .studio-entry { grid-template-columns: minmax(0,1fr); gap: .3rem; }
+  .studio-entry[data-start] { padding-top: .6rem; }
+  .studio-content { grid-column: 1; }
+  .studio-author { padding-top: 0; }
+  .studio-toolbar { gap: .4rem; }
+  .studio-intro h2 { font-size: clamp(1.6rem, 7cqw, 2.2rem); }
+  .studio-sleeve { width: clamp(4.3rem, 21cqw, 6rem); }
+  .studio-intro p { font-size: .875rem; }
+  .studio-prompts button { grid-template-columns: 2.2rem minmax(0,1fr) 1rem; gap: .5rem; }
+  .studio-dock { padding-bottom: .6rem; }
+}
+.studio-window .studio-welcome { padding-block: .6rem; }
+.studio-window .studio-prompts { margin-top: .9rem; }
+.studio-window .studio-prompts button { min-height: 2.4rem; }
+.studio-window .studio-keys { gap: .25rem .6rem; }
+.studio-question, .studio-answers { border-inline-start: 2px solid var(--color-line); padding-inline-start: 1rem; overflow-wrap: anywhere; }
+.studio-question fieldset { min-width: 0; margin-bottom: 1rem; }
+.studio-question .studio-primary { margin-top: 0; }
+.studio-question legend, .studio-answers dd { color: var(--color-paper); font-weight: 600; }
+.studio-question-option { display: flex; align-items: baseline; gap: .65rem; padding-block: .5rem; cursor: pointer; }
+.studio-question-option input { accent-color: var(--color-accent); flex-shrink: 0; }
+.studio-question-option small, .studio-answers dt { display: block; color: var(--color-dim); font-size: .8125rem; }
+.studio-question-custom { width: 100%; margin-top: .35rem; padding: .6rem; background: var(--color-panel); border: 1px solid var(--color-line); }
+.studio-answers div + div { margin-top: .55rem; }

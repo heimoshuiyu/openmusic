@@ -1,0 +1,36 @@
+.assistant-markdown {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: .875rem;
+  line-height: 1.65;
+  color: var(--color-paper);
+}
+.assistant-markdown :is(p, ul, ol, blockquote, pre, .assistant-table-scroll) { margin-block: .65em; }
+.assistant-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 1.15em 0 .35em; line-height: 1.4; font-weight: 650; }
+.assistant-markdown h1 { font-size: 1.15rem; }
+.assistant-markdown h2 { font-size: 1rem; }
+.assistant-markdown strong { font-weight: 650; }
+.assistant-markdown ul, .assistant-markdown ol { padding-inline-start: 1.45em; }
+.assistant-markdown ul { list-style: disc; }
+.assistant-markdown ol { list-style: decimal; }
+.assistant-markdown li::marker { color: var(--color-dim); }
+.assistant-markdown li + li { margin-top: .3em; }
+.assistant-markdown li > :is(ul, ol, p) { margin-block: .2em; }
+.assistant-markdown blockquote { border-inline-start: 2px solid var(--color-line); padding-inline-start: .8em; color: var(--color-dim); }
+.assistant-markdown hr { margin-block: 1em; border-color: var(--color-line); }
+.assistant-markdown a { text-decoration: underline; text-underline-offset: .18em; }
+.assistant-markdown code { font: .9em var(--font-readout); }
+.assistant-markdown :not(pre) > code { background: var(--color-raised); border-radius: 3px; padding: .1em .3em; }
+.assistant-markdown pre, .assistant-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--color-line); border-radius: 6px; }
+.assistant-markdown pre { padding: .65em .85em; background: var(--color-shell); white-space: pre; overflow-wrap: normal; }
+.assistant-markdown table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .8125rem; }
+.assistant-markdown :is(th, td) { min-width: 5em; padding: .4em .65em; vertical-align: top; }
+.assistant-markdown :is(th, td):not([align]) { text-align: start; }
+.assistant-markdown th { background: var(--color-raised); font-weight: 600; }
+.assistant-markdown td { border-top: 1px solid var(--color-line); }
+.assistant-markdown > :first-child { margin-top: 0; }
+.assistant-markdown > :last-child { margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .assistant-markdown [data-sd-animate], .assistant-markdown [data-sd-animate-marker]::marker { animation: none; }
+}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：红胶片盘（品牌识别：红=声音正在发生） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="108dp"
+  android:height="108dp"
+  android:viewportWidth="108"
+  android:viewportHeight="108">
+  <!-- 盘体 -->
+  <path
+    android:pathData="M54,54 m-26,0 a26,26 0 1,1 52,0 a26,26 0 1,1 -52,0"
+    android:fillColor="#3B5CF6" />
+  <!-- 槽纹 -->
+  <path
+    android:pathData="M54,54 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0 M54,54 m-15,0 a15,15 0 1,1 30,0 a15,15 0 1,1 -30,0"
+    android:strokeColor="#3A1111"
+    android:strokeWidth="1.4"
+    android:fillColor="#00000000" />
+  <!-- 中孔 -->
+  <path
+    android:pathData="M54,54 m-4.5,0 a4.5,4.5 0 1,1 9,0 a4.5,4.5 0 1,1 -9,0"
+    android:fillColor="#0E0E11" />
+</vector>

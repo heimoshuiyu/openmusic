@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知小图标（状态栏/通知左下角）：纯白胶片盘，与 launcher 前景同造型。
+     小图标必须是单色 alpha 图形，系统按需染色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="24"
+  android:viewportHeight="24">
+  <path
+    android:pathData="M12,12 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0 M12,12 m-3.2,0 a3.2,3.2 0 1,1 6.4,0 a3.2,3.2 0 1,1 -6.4,0"
+    android:fillColor="#FFFFFFFF"
+    android:fillType="evenOdd" />
+</vector>

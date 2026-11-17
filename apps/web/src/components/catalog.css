@@ -1,0 +1,77 @@
+.om-wordmark { display: inline-flex; align-items: center; gap: .55rem; color: var(--color-paper); font: 700 1.65rem/1 var(--font-readout); letter-spacing: -.09em; }
+.om-wordmark > span { color: var(--color-faint); }
+.om-wordmark b { color: var(--color-paper); }
+.catalog-rail { width: var(--rail-width); padding: 0 var(--rail-edge) 5.25rem; border-inline-end: 1px solid var(--color-line); background: var(--color-shell); }
+.catalog-brand { display: flex; align-items: center; min-height: 5rem; margin-bottom: .65rem; }
+.catalog-nav-title { margin-bottom: .4rem; padding-block: .4rem; color: var(--color-faint); font-size: .8rem; border-bottom: 1px solid var(--color-line); }
+.catalog-nav-link { display: flex; align-items: center; gap: .8rem; min-height: 2.4rem; padding: .45rem .6rem; border-inline-start: 2px solid transparent; font-size: .9rem; }
+.catalog-nav-link.active { border-color: var(--color-accent); background: var(--blue-wash); color: var(--color-accent); font-weight: 600; }
+.catalog-index { font: .75rem/1 var(--font-readout); color: var(--color-faint); }
+.catalog-nav-link.active .catalog-index { color: inherit; }
+.catalog-menu { margin: 0 0 0 auto; width: min(20rem, 92vw); height: 100%; max-height: 100%; background: var(--color-shell); color: var(--color-paper); padding: 1rem; border-left: 1px solid var(--color-line); }
+.catalog-menu::backdrop { background: #0007; }
+.catalog-menu .catalog-nav-link { min-height: 2.75rem; }
+.catalog-page { width: 100%; max-width: 96rem; padding: clamp(1.4rem, 3.8vw, 4rem) var(--page-inset); margin-inline: auto; }
+.catalog-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: .65rem 1rem; border-bottom: 1px solid var(--color-paper); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+.catalog-heading h1, .detail-title { font-size: clamp(1.9rem, 3.6vw, 3.2rem); line-height: 1.1; font-weight: 600; letter-spacing: -.055em; overflow-wrap: anywhere; }
+.catalog-heading .heading-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; max-width: 100%; margin-left: auto; }
+.catalog-admin { max-width: 80rem; }
+.catalog-admin > section { scroll-margin-top: 1rem; }
+.catalog-heading h2 { font-size: clamp(1.25rem, 2vw, 1.65rem); font-weight: 600; letter-spacing: -.035em; }
+.catalog-tabs { display: flex; gap: .75rem; align-items: center; }
+.catalog-tabs button { padding-block: .5rem; font-size: .8125rem; border-bottom: 2px solid transparent; color: var(--color-dim); }
+.catalog-tabs button[aria-selected=true] { color: var(--color-accent); border-color: currentColor; }
+.album-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,10.5rem),1fr)); gap: 1.75rem 1rem; }
+.album-grid .album-card { min-width: 0; width: auto; }
+.library-mast { display: flex; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding-bottom: clamp(1.5rem,3vw,3rem); }
+.library-mast h1 { font-size: clamp(2.5rem,5.6vw,5.25rem); line-height: 1.1; font-weight: 570; letter-spacing: -.065em; }
+.library-mast p { margin-top: .75rem; font: .875rem/1.5 var(--font-readout); color: var(--color-dim); }
+.record-section { display: grid; grid-template-columns: minmax(7rem, 17%) minmax(0,1fr); gap: 1.25rem; padding-block: 1.5rem 2.25rem; border-top: 1px solid var(--color-line); }
+.record-section:first-of-type { border-color: var(--color-paper); }
+.record-section h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: -.025em; }
+.record-shelf { display: flex; gap: 1rem; min-width: 0; overflow-x: auto; padding-bottom: .75rem; scroll-snap-type: x proximity; }
+.record-shelf .album-card { width: clamp(9rem,15vw,13rem); scroll-snap-align: start; }
+.catalog-detail { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--color-paper); }
+.track-columns { font-family: var(--font-readout); background: var(--color-panel); }
+.catalog-login { max-width: 64rem; min-height: 100%; padding: clamp(1rem,5vw,4rem); margin-inline: auto; display: flex; flex-direction: column; }
+.login-spread { display: grid; grid-template-columns: minmax(0,1fr) minmax(15rem, 22rem); align-items:center; gap: clamp(2rem,7vw,6rem); margin-block: auto; padding-block: 2rem; border-block: 1px solid var(--color-line); }
+.login-spread svg { max-width: 24rem; width: 100%; }
+.playback-spread { display:flex; flex:1; min-height:0; align-items:center; justify-content:center; gap:clamp(1.25rem,5vw,6rem); padding: 1rem var(--page-inset); }
+/* A stationary cover wash under the moving label. Fade into the page stock behind the
+   controls, rather than putting text directly on the (potentially very busy) artwork. */
+.playback-wash { position:absolute; inset:0; overflow:hidden; pointer-events:none; opacity:.26; mask-image:linear-gradient(115deg,#000 5%,#000a 43%,#0002 85%); }
+@media (prefers-color-scheme: dark) { .playback-wash { opacity:.32; } }
+.playback-wash > div { transform:scale(1.1); filter:blur(18px); }
+.playback-pressing { position:relative; width:min(39vw,57vh,26rem); aspect-ratio:1; flex:none; }
+.playback-pressing::before { content:""; position:absolute; inset:0; border-radius:50%;
+  /* The soft grazing reflection stays in the room; only the grain and label turn. */
+  background:radial-gradient(ellipse at 24% 13%,#343434 0%,#191919 24%,#0e0e0e 53%,#080808 80%);
+  box-shadow:inset 1px 1px 2px #ffffff24,inset -1px -2px 4px #000,0 .5rem 1.3rem #0003; }
+.playback-disc { position:absolute; inset:0; border-radius:50%; }
+.playback-info h2 { font-size:clamp(1.6rem,3.5vw,3.3rem); line-height:1.15; }
+.playback-lyrics { width:min(41vw,30rem); height:min(56vh,27rem); flex:none; }
+@media (max-width:47.99rem) and (orientation:portrait) { .playback-lyrics { width:100%; height:min(35vh,22rem); } }
+@media (max-width: 47.99rem) and (orientation:portrait) {
+  .playback-spread { flex-direction:column; }
+  .playback-pressing { width:min(72vw,35vh); }
+  .playback-wash { mask-image:linear-gradient(#000 8%,#0009 55%,#0002 85%); }
+}
+@media (max-height: 31rem) {
+  .playback-info { gap:.35rem; }
+  .playback-pressing { width:min(33vw,54vh); }
+}
+@media (hover:hover) {
+  .catalog-nav-link:hover { background: var(--color-panel); color: var(--color-accent); }
+  .catalog-tabs button:hover { color: var(--color-accent); }
+}
+@media (max-width: 63.99rem) {
+  .record-section { grid-template-columns: minmax(0,1fr); gap:.75rem; }
+  .record-section > header { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; }
+}
+@media (max-width: 47.99rem) {
+  .catalog-admin > section { scroll-margin-top: 4rem; }
+  .catalog-heading .heading-tools { margin-left: 0; }
+  .album-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .login-spread { grid-template-columns: minmax(0,1fr); }
+  .login-spread svg { max-width: 8rem; }
+}
