@@ -5,7 +5,8 @@ COPY vendor/opencode/*.tgz vendor/opencode/
 COPY package.json bun.lock ./
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
-RUN bun install
+RUN bun install --frozen-lockfile
+COPY tsconfig.base.json ./
 COPY apps/web apps/web
 COPY packages/shared packages/shared
 RUN cd apps/web && bun run build
@@ -21,7 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg python3-
 COPY package.json bun.lock ./
 COPY apps/server/package.json apps/server/
 COPY packages/shared/package.json packages/shared/
-RUN bun install --production
+RUN bun install --production --frozen-lockfile
+COPY tsconfig.base.json ./
 COPY apps/server apps/server
 COPY packages/shared packages/shared
 COPY --from=web-build /build/apps/web/dist apps/web/dist
