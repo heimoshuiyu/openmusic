@@ -19,6 +19,8 @@ export interface AppConfigShape {
   readonly agentEnabled: boolean
   /** agent 独立配置文件路径（JSON，作为 OpenCode config.content 内联）；空 = <dataDir>/agent-config.json */
   readonly agentConfigPath: string
+  /** 首启音乐目录种子（MUSIC_FOLDERS，逗号分隔绝对路径；仅 music_folders 为空时执行）；此后以 API 管理为准 */
+  readonly musicFoldersSeed: string
 }
 
 export class AppConfig extends Context.Service<AppConfig, AppConfigShape>()("openmusic/AppConfig") {}
@@ -43,5 +45,6 @@ export const AppConfigLive = Layer.effect(
     logLevel: Config.LogLevel("LOG_LEVEL").pipe(Config.withDefault("Info" as const)),
     agentEnabled: Config.Boolean("AGENT_ENABLED").pipe(Config.withDefault(false)),
     agentConfigPath: Config.String("AGENT_CONFIG").pipe(Config.withDefault("")),
+    musicFoldersSeed: Config.String("MUSIC_FOLDERS").pipe(Config.withDefault("")),
   }),
 )

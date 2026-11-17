@@ -1,8 +1,10 @@
 import * as fs from "node:fs/promises"
+import * as nodePath from "node:path"
 import { Config, Context, Effect, Layer, Option } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { NotFound, Unauthorized } from "../domain/errors"
 import { UserPublic } from "../domain/user"
+import { MusicFolderRepo } from "../repo/music-folders"
 import { UserRepo, type UserRow } from "../repo/users"
 import {
   decryptSecret,
@@ -130,6 +132,24 @@ export class Auth extends Context.Service<Auth, AuthApi>()("app/Auth") {
         yield* Effect.logInfo(`bootstrap admin created — username: ${username}`)
       }
     }).pipe(Effect.catchCause((cause) => Effect.logError("admin bootstrap failed", cause)))
+
+    // ---- 首启音乐目录种子（MUSIC_FOLDERS，music_folders 为空时执行一次；docs/02 §7） ----
+    yield* Effect.gen(function* () {
+      if (config.musicFoldersSeed.length === 0) return
+      const existing = yield* repo(MusicFolderRepo.list)
+      if (existing.length > 0) return
+      for (const raw of config.musicFoldersSeed.split(",")) {
+        const folderPath = raw.trim()
+        if (folderPath.length === 0) continue
+        if (!nodePath.isAbsolute(folderPath)) {
+          yield* Effect.logWarning(`MUSIC_FOLDERS: skipping non-absolute path ${folderPath}`)
+          continue
+        }
+        const name = folderPath.split("/").filter(Boolean).pop() ?? folderPath
+        yield* repo(MusicFolderRepo.create({ name, path: folderPath }))
+        yield* Effect.logInfo(`bootstrap music folder seeded — ${folderPath}`)
+      }
+    }).pipe(Effect.catchCause((cause) => Effect.logError("music folder seed failed", cause)))
 
     const login = (username: string, password: string, userAgent: string | null) =>
       Effect.flatMap(repo(UserRepo.findByUsername(username)), (row) =>

@@ -65,6 +65,7 @@ const TestCfg = Layer.succeed(AppConfig, {
   logLevel: "Info" as const,
   agentEnabled: false,
   agentConfigPath: "",
+  musicFoldersSeed: "",
 })
 
 /** SessionAuth 测试实现：不做 cookie 校验，直接注入可切换的 CurrentUser。

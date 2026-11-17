@@ -56,6 +56,7 @@ export async function startServer() {
     logLevel: "Info",
     agentEnabled: false,
     agentConfigPath: "",
+    musicFoldersSeed: process.env.MUSIC_FOLDERS ?? "",
   })
 
   const TestPg = PgClient.layer({ url: Redacted.make(TEST_DB_URL) })

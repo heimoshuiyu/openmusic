@@ -216,6 +216,7 @@ beforeAll(async () => {
     logLevel: "Error" as const,
     agentEnabled: true,
     agentConfigPath: "",
+    musicFoldersSeed: "",
   })
 
   scope = Effect.runSync(Scope.make())
