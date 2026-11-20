@@ -50,6 +50,7 @@ import dev.hmsy.openmusic.data.formatSizeBytes
 import dev.hmsy.openmusic.data.neteaseCoverUrlOk
 import dev.hmsy.openmusic.data.neteaseLabelOk
 import dev.hmsy.openmusic.data.neteasePositionTextOk
+import dev.hmsy.openmusic.data.neteaseTagsFormOk
 import dev.hmsy.openmusic.data.neteaseTagsPatch
 import dev.hmsy.openmusic.ui.icons.OmIcons
 import dev.hmsy.openmusic.ui.components.DetailTopBar
@@ -190,9 +191,9 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
   var coverMode by remember(info) { mutableStateOf(0) } // 0=保持 1=恢复网易云封面 2=图片 URL
   var coverUrl by remember { mutableStateOf("") }
 
-  // 必填文本（曲名/歌手/专辑）非空校验；可选字段清空由 patch 的 unsupportedClears 兜底
-  val textsOk = listOf(title, artist, album).all(::neteaseLabelOk)
-  val positionsOk = neteasePositionTextOk(trackText) && neteasePositionTextOk(discText)
+  // 提交前置校验（纯函数）：必填非空合法；可选字段留空合法（清除企图由 patch.unsupportedClears 处理），
+  // 非空时同样须过 label 校验——301+ 字符/控制字符在本地拦截，不留给服务端 422
+  val formOk = neteaseTagsFormOk(title, artist, album, albumArtist, genre, trackText, discText)
   val coverOk = coverMode != 2 || neteaseCoverUrlOk(coverUrl.trim())
   // 载荷 = 唯一裁决点：变更才提交；清除已设值不会发出空串（服务端 NonEmptyString 拒绝）
   val patch = neteaseTagsPatch(
@@ -297,7 +298,7 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
           )
         }
       },
-      enabled = patch.isDirty && patch.unsupportedClears.isEmpty() && textsOk && positionsOk && coverOk && !saving,
+      enabled = patch.isDirty && patch.unsupportedClears.isEmpty() && formOk && coverOk && !saving,
       colors = ButtonDefaults.buttonColors(containerColor = Om.Paper, contentColor = Om.Shell),
       shape = RoundedCornerShape(2.dp),
     ) { Text(if (saving) "保存中…" else "保存元数据", style = OmType.Row) }

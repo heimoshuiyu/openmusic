@@ -43,9 +43,15 @@ class NeteaseRunnerTest {
     val runner = NeteaseRunner(this) { _, _, _ -> throw SocketTimeoutException("timeout") }
     assertNull(runner.start("u", "1", null, "音乐"))
     runCurrent()
-    val error = runner.error
-    assertNotNull(error)
-    assertTrue(error!!, error.contains("不会取消") && error.contains("重新提交") && error.contains("不会重复下载"))
+    val message = runner.error
+    assertNotNull(message)
+    val text = message!!
+    // 两种结果都要如实说明：仍在进行 → 共享终态；已结束 → 幂等重跑，不承诺取回原始 failures
+    assertTrue(text, text.contains("不会取消"))
+    assertTrue(text, text.contains("同一曲库目录、子目录"))
+    assertTrue(text, text.contains("共享其终态"))
+    assertTrue(text, text.contains("幂等重跑"))
+    assertTrue(text, text.contains("不保证重现"))
   }
 
   @Test

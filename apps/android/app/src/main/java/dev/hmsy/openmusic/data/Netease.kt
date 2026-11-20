@@ -134,6 +134,27 @@ fun neteasePositionTextOk(text: String): Boolean {
   return text.trim().toIntOrNull()?.let { it in 1..9999 } == true
 }
 
+/**
+ * 表单可提交性（纯函数，与 neteaseTagsPatch 配套）：
+ * - 必填文本（曲名/歌手/专辑）须过 label 校验；
+ * - 可选文本（专辑作者/流派）留空合法（清除企图由 patch.unsupportedClears 处理），
+ *   非空时同样须过 label 校验——301+ 字符、控制字符在本地拦截，不留给服务端 422；
+ * - 位置文本沿用 position 校验。
+ */
+fun neteaseTagsFormOk(
+  title: String,
+  artist: String,
+  album: String,
+  albumArtist: String,
+  genre: String,
+  trackText: String,
+  discText: String,
+): Boolean =
+  neteaseLabelOk(title) && neteaseLabelOk(artist) && neteaseLabelOk(album) &&
+    (albumArtist.isBlank() || neteaseLabelOk(albumArtist)) &&
+    (genre.isBlank() || neteaseLabelOk(genre)) &&
+    neteasePositionTextOk(trackText) && neteasePositionTextOk(discText)
+
 // ── 元数据 PATCH 载荷计算（纯函数，表单与服务端语义的唯一裁决点）────────
 
 /** PATCH 载荷：字段 null = 保持不变（不发送）。unsupportedClears = 用户想清空、

@@ -191,6 +191,21 @@ class NeteaseModelsTest {
   }
 
   @Test
+  fun tagsFormOkBlocksInvalidNonEmptyOptionalValues() {
+    // 合法基线
+    assertTrue(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "周杰伦", "Pop", "3", "1"))
+    // 可选字段留空合法（清除企图交由 patch.unsupportedClears 处理，patch 语义不变）
+    assertTrue(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "", "", "3", "1"))
+    // 非空的可选字段同样须过 label 校验：301 字符 / 控制字符在本地拦截
+    assertFalse(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "d".repeat(301), "Pop", "3", "1"))
+    assertFalse(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "周杰伦", "a\u0007b", "3", "1"))
+    // 必填与位置的原有拦截保持
+    assertFalse(neteaseTagsFormOk("", "周杰伦", "叶惠美", "周杰伦", "Pop", "3", "1"))
+    assertFalse(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "周杰伦", "Pop", "x", "1"))
+    assertFalse(neteaseTagsFormOk("晴天", "周杰伦", "叶惠美", "周杰伦", "Pop", "10000", "1"))
+  }
+
+  @Test
   fun labelValidationMirrorsServerMetadataFields() {
     assertTrue(neteaseLabelOk("晴天"))
     assertTrue(neteaseLabelOk("Jay Chou 2026"))
