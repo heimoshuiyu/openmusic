@@ -228,6 +228,14 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 ## 5. 入库内容与歌词
 
 文件命名 `Netease-<songId>.mp3|flac`（`netease_imports` 溯源：song_id/导入者/实际音质档位）；同目录同 ID 已有文件记 `skipped` 不覆盖。元数据（曲名/歌手/专辑/发行日/封面）来自网易云本身并内嵌文件标签，发行日即专辑发行日期（作为专辑年份，不同于 YouTube 的上传日）；封面仅接受 `*.music.126.net`（http 归一为 https，实际字节可能是 PNG 伪装 .jpg，写入端已兼容）。无 iTunes 目录补全。歌词：导入成功后原文+翻译（若有，等时间戳合并为「原文/译文」双行）自动存入共享歌词体系（0012 表，digest 去重）；失败仅记 `warnings`，不阻断导入。
+
+## 6. 目录端点、导入后管理与 Web 界面
+
+- `GET /imports/netease/folders`：登录可读，返回 `[{id,name,path,writable}]`（`writable` 供导入表单屏蔽不可写根目录）。
+- `GET /imports/netease/subdirectories?folderId=&subdirectory=`：只看一层**已存在**子目录，返回 `{directories:string[],truncated:boolean}`（相对根路径，最多 80 条；不递归、不跟随符号链接）。手输的相对子目录仍允许，服务端校验为权威。
+- `GET /imports/netease/tracks/:id/metadata`：登录可读，返回 `NeteaseInfo`（`trackId/songId/quality/format/filename/title/artist/album/albumArtist/genre/trackNumber/discNumber/hasCover/warnings?`；无 YouTube 的 `coverSource/uploadDate`）。`PATCH` 同位端点接受与 YouTube 相同的固定文本标签 + `cover`（`data:image…`、`https://…music.126.net` 或字面量 `"netease"` 恢复网易云封面），仅导入者或管理员可写，返回更新后的 `NeteaseInfo`；未能嵌入文件时如实返回 `warnings`。
+- `DELETE /imports/netease/tracks/:id/library-entry`：移出共享曲库与歌单、保留磁盘文件（写 `library_exclusions`）；`POST /imports/netease/tracks/:id/file-deletion-requests`：创建 5 分钟人工核对票据，返回 `{requestId,reviewPath:"/review-deletion/<uuid>",expiresAt}`，随后 `POST /imports/netease/file-deletion-requests/:key/review|confirm` 与 `DELETE …/:key` 与 YouTube 三步同形。仅导入者或管理员可操作。
+- Web 端 `/imports` 页面（来源切换：网易云原生 REST 导入；YouTube 仍走音乐助手工具时间线）消费搜索/链接粘贴/目录选择/终态结果；管理入口在曲目页行与导入结果行懒加载（打开才查 `metadata`，404 = 非网易云导入或不可管理）。`/review-deletion/:requestId` 核对页按「先 YouTube、仅明确 404 才回落网易云」解析票据来源，confirm/cancel 走同一来源；输入完整文件名的人工确认不变。
 # 助手消息投递
 
 `POST /api/v1/agent/sessions/:id/prompt` 可选 `delivery: "steer" | "queue"`。省略为 `steer`，允许在 busy 时提交，成功仍返回 204（已受理，不表示已投递）。`steer` 在可接收输入的步骤补充当前任务，不中断正在执行的工具；`queue` 留待后续轮次。`GET .../:id/inbox` 返回 `{busy,items:[{id,text,delivery}]}`，只投影本会话的待投递用户文本；`PATCH .../:id/inbox/:item {delivery}` 改方式，`DELETE .../:id/inbox/:item` 撤回。所有操作核验会话属主。网页 Enter 默认补充，忙碌时可点排队或 Alt+Enter；只在宿主投递后写入消息时间线，SSE 断线重连后从宿主恢复。
