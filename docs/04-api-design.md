@@ -215,7 +215,7 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 以下管理端点与 YouTube 组对齐（语义见 docs/04 YouTube 节；删除票据规则逐条相同）：
 
 - `GET /folders`：`[{id,name,path,writable}]`，与 `GET /api/v1/music-folders` 同源数据、附可写性探测。
-- `GET /subdirectories?folderId=&subdirectory=`：目标目录下一层 `{directories,truncated}`；不递归、拒符号链接，非法/不存在 422。
+- `GET /subdirectories?folderId=&subdirectory=`：目标目录下一层 `{directories,truncated}`，不递归。错误语义：输入非法（folderId 非 1–16 位数字形态、subdirectory 路径段含 `.`/反斜杠/控制字符等）→ 422；folderId 形态合法但不存在 → 404（`music_folder`）；子目录不存在或为符号链接 → 422。
 - `GET /tracks/:id/metadata`：`NeteaseInfo{trackId,songId,quality,format,filename,title,artist,album,albumArtist,genre,trackNumber,discNumber,hasCover,warnings?}`。任意登录用户可读（纯 DB 读）；`quality` 是导入时探针得到的交付档位快照（`standard/higher/exhigh/lossless`），重扫不改写；无 `coverSource/uploadDate`——发行日即专辑年份，走 `albums.year`，与 YouTube 的逐曲 `upload_date` 语义刻意不同。
 - `PATCH /tracks/:id/metadata`：payload 为 `NeteaseTags`（`title/artist/album/albumArtist/genre/trackNumber/discNumber` 全可选 + `cover`）。`cover` 接受 `"netease"`（回源该曲详情里的专辑封面）、`*.music.126.net` 图片 URL（http 归一 https）或 `data:image/jpeg|png|webp` 内联图（原图 ≤4 MiB）；其他 host/本地路径一律 422。仅**导入者或管理员**可改，其余 404 不泄露存在性。成功后标签内嵌进文件（staging 拷贝 + inode 复验 + 失败回滚，同 YouTube 编辑）；发布走 `Scanner.indexImport` 固定文本覆盖值（重扫存活），**不改写 `netease_imports`**——管理员代编辑不会挪走 `imported_by`，`quality` 快照不动；发行日标签保留、专辑年份不变。标签写不进文件时可降级 `dbOnly` 并以 `warnings` 如实回报（要求了封面则绝不降级）。
 - 无 `netease_imports` 行的 legacy 文件（如曲目行被扫描器重建）：仅管理员可管理，且一切写/删入口先核验文件内 `OPENMUSIC_NETEASE_ID` 标签等于文件名 songId（mp3 的 TXXX / flac 的同名 vorbis 键），不符 fail closed。

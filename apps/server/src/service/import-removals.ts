@@ -28,10 +28,8 @@ export interface RemovalTarget {
 export type RemovalTicket<T> = {owner:number; target:T; identity:string; token:string; expires:number}
 
 export interface RemovalSource<T extends RemovalTarget, F extends string> {
-  /** 404 实体名（对非属主与不存在同样 NotFound，不泄露存在性） */
-  readonly entity:string
   /** 属主/来源/文件名校验（实现捕获自己的 sql 客户端，R=never）；lock=true 时带 for update。
-   *  非属主或非本源目标 → NotFound */
+   *  404 实体串由各 load 自带（youtube_track / netease_track），对非属主与不存在同样 NotFound。 */
   readonly load:(user:number,id:string,lock:boolean)=>Effect.Effect<T, NotFound>
   /** legacy 文件（无 provenance 行）经 pinned fd 的来源核验；不符即 throw */
   readonly verifyLegacy:(target:T,file:FileHandle)=>Promise<void>

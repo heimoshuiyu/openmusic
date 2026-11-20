@@ -28,7 +28,6 @@ const load=Effect.fnUntraced(function*(sql:SqlClient.SqlClient,user:number,id:st
 
 export function youtubeRemovals(sql:SqlClient.SqlClient, guarded:<A,E>(id:string,task:Effect.Effect<A,E>)=>Effect.Effect<A,E|BadRequest>) {
   return importRemovals<YoutubeTarget,YoutubeFormat>(sql,guarded,{
-    entity:"youtube_track",
     load:(user,id,lock)=>load(sql,user,id,lock),
     // Pre-provenance mp3 rips carry the canonical watch URL in a TXXX purl/comment frame.
     verifyLegacy:async(target,file:FileHandle)=>{

@@ -22,6 +22,14 @@ for frame in tags.getall('TXXX'):
         frame.text = [sys.argv[2]]
 tags.save(sys.argv[1], v1=0, v2_version=4)`, file, id]).exitCode
 
+/** FLAC 的 provenance 是同名 vorbis 键（tag_media.py netese 分支写入形态）。 */
+const rewriteFlacProvenance = (file: string, id: string) =>
+  Bun.spawnSync(["python3", "-I", "-c", `import sys
+from mutagen.flac import FLAC
+audio = FLAC(sys.argv[1])
+audio['OPENMUSIC_NETEASE_ID'] = [sys.argv[2]]
+audio.save()`, file, id]).exitCode
+
 test("Netease import: search → start → metadata/edit → unindex → deletion tickets → legacy", async () => {
   await migrateTestDb(); await truncateDomainTables(true)
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "om-netease-test-")), previous = process.env.PATH
@@ -31,7 +39,7 @@ test("Netease import: search → start → metadata/edit → unindex → deletio
   try {
     const image = (color: string) => Bun.spawnSync(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", `color=c=${color}:s=40x40`, "-frames:v", "1", "-c:v", "mjpeg", "-f", "image2pipe", "pipe:1"]).stdout
     const red = image("red"), blue = image("blue")
-    // 曲目详情 fixture：5264842/186016/999000 可导入；2606227455 是 VIP（预检即跳过）
+    // 曲目详情 fixture：5264842/186016/999000/777001 可导入（777001 由 shim 产 FLAC）；2606227455 是 VIP（预检即跳过）
     const detail = (id: string) => id === "5264842"
       ? { id: 5264842, name: "晴天", artists: [{ name: "周杰伦" }], album: { name: "叶惠美", picUrl: "http://p1.music.126.net/6TqR_U__xy.jpg" }, fee: 8, duration: 2000 }
       : id === "2606227455"
@@ -56,7 +64,10 @@ test("Netease import: search → start → metadata/edit → unindex → deletio
 for arg do last="$arg"; done
 id=\${last##*id=}
 case "$id" in ''|*[!0-9]*) exit 3;; esac
-ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a libmp3lame -b:a 128k audio.mp3 || exit 1
+case "$id" in
+  777001) ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a flac audio.flac || exit 1;;
+  *) ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a libmp3lame -b:a 128k audio.mp3 || exit 1;;
+esac
 printf '{"id":"%s","title":"网易云歌曲 %s","creators":[{"name":"歌手甲"}],"album":"网易专辑","album_artists":[{"name":"专辑艺人"}],"timestamp":1060646400,"thumbnail":"http://p1.music.126.net/6TqR_U__xy.jpg"}\\n' "$id" "$id"`, { mode: 0o700 })
     process.env.PATH = `${tmp}:${previous}`
     expect((await a.get(`${base}/search?q=x`)).status).toBe(401); await a.login()
@@ -71,8 +82,10 @@ printf '{"id":"%s","title":"网易云歌曲 %s","creators":[{"name":"歌手甲"}
     expect(subs.status).toBe(200)
     expect((subs.body as { directories: string[] }).directories.slice().sort()).toEqual(["Other", "Singles"])
     expect((subs.body as { truncated: boolean }).truncated).toBe(false)
-    expect((await b.get(`${base}/subdirectories?folderId=missing`)).status).toBe(422)
-    expect((await b.get(`${base}/subdirectories?folderId=${folderId}&subdirectory=escape`)).status).toBe(422)
+    expect((await b.get(`${base}/subdirectories?folderId=missing`)).status).toBe(422) // folderId 形态非法
+    expect((await b.get(`${base}/subdirectories?folderId=999999`)).status).toBe(404) // 形态合法但不存在
+    expect((await b.get(`${base}/subdirectories?folderId=${folderId}&subdirectory=escape`)).status).toBe(422) // 符号链接
+    expect((await b.get(`${base}/subdirectories?folderId=${folderId}&subdirectory=missing`)).status).toBe(422) // 不存在
     // 搜索：GET /search，候选带 vip 标记
     const found = await b.get(`${base}/search?q=${encodeURIComponent("晴天")}`)
     expect(found.status).toBe(200)
@@ -132,11 +145,16 @@ printf '{"id":"%s","title":"网易云歌曲 %s","creators":[{"name":"歌手甲"}
     expect((await b.get(endpoint)).body).toMatchObject({ title: "编辑后的标题", genre: "J-Pop", format: "mp3" })
     const track = await b.get(`/api/v1/tracks/${id}`)
     expect((track.body as { album: { year: number | null } }).album.year).toBe(2003)
-    // 导入第二首（删除流程的目标）与第三首（legacy 与终态兄弟）
+    // 导入第二首（删除流程的目标）、第三首（mp3 legacy 与终态兄弟）与第四首（FLAC legacy）
     const second = await b.post(base + "/requests", { url: "https://music.163.com/song?id=186016", folderId, subdirectory: "Singles" })
     const third = await b.post(base + "/requests", { url: "https://music.163.com/song?id=999000", folderId, subdirectory: "Singles" })
-    expect([second.status, third.status]).toEqual([200, 200])
+    const fourth = await b.post(base + "/requests", { url: "https://music.163.com/song?id=777001", folderId, subdirectory: "Singles" })
+    expect([second.status, third.status, fourth.status]).toEqual([200, 200, 200])
     const c = (second.body as NeteaseImportResult).trackIds[0]!, d = (third.body as NeteaseImportResult).trackIds[0]!
+    const flacTrack = (fourth.body as NeteaseImportResult).trackIds[0]!
+    const probeFiles = (fourth.body as NeteaseImportResult).files
+    expect((fourth.body as NeteaseImportResult).files).toEqual([{ trackId: flacTrack, name: "Netease-777001.flac" }])
+    expect((await b.get(`${base}/tracks/${flacTrack}/metadata`)).body).toMatchObject({ songId: "777001", format: "flac", quality: "lossless", filename: "Netease-777001.flac" })
     // N3：移出曲库不删文件，排除防复活
     const entry = `${base}/tracks/${id}/library-entry`
     expect((await other.del(entry)).status).toBe(404)
@@ -207,6 +225,28 @@ printf '{"id":"%s","title":"网易云歌曲 %s","creators":[{"name":"歌手甲"}
       const human = (await a.post(`${base}/file-deletion-requests/${key}/review`)).body as { token: string }
       expect((await a.post(`${base}/file-deletion-requests/${key}/confirm`, { token: human.token, filename: "Netease-999000.mp3" })).status).toBe(204)
       expect(await Bun.file(legacy).exists()).toBe(false)
+      // FLAC legacy：tag_media.py 的 netese 分支把 provenance 写成同名 vorbis 键；
+      // 先断言 music-metadata 实际暴露的形态（vorbis 容器、id 无前缀、纯字符串值），
+      // 再走同一条 request→confirm 删除链：篡改 fail closed，正确 id 可删。
+      await legacyPool.query("delete from netease_imports where track_id=$1", [flacTrack])
+      const flacFile = path.join(dest, "Netease-777001.flac")
+      const flacMeta = await parseFile(flacFile)
+      const provenance = Object.values(flacMeta.native).flat().find(t => /^(?:TXXX:)?OPENMUSIC_NETEASE_ID$/i.test(String(t.id)) && t.value === "777001")
+      expect(provenance).toMatchObject({ id: "OPENMUSIC_NETEASE_ID", value: "777001" })
+      expect((await b.get(`${base}/tracks/${flacTrack}/metadata`)).body).toMatchObject({ songId: "777001", format: "flac", quality: null })
+      expect(rewriteFlacProvenance(flacFile, "111")).toBe(0)
+      expect((await a.post("/api/v1/library/scan?force=true")).status).toBe(204); await a.waitScanIdle()
+      expect((await a.post(`${base}/tracks/${flacTrack}/file-deletion-requests`)).status).toBe(422) // 篡改 vorbis 键 → fail closed
+      expect(await Bun.file(flacFile).exists()).toBe(true)
+      expect(rewriteFlacProvenance(flacFile, "777001")).toBe(0)
+      expect((await a.post("/api/v1/library/scan?force=true")).status).toBe(204); await a.waitScanIdle()
+      const flacTicket = await a.post(`${base}/tracks/${flacTrack}/file-deletion-requests`)
+      expect(flacTicket.status).toBe(200)
+      const flacKey = (flacTicket.body as { requestId: string }).requestId
+      const flacReview = (await a.post(`${base}/file-deletion-requests/${flacKey}/review`)).body as { token: string }
+      expect((await a.post(`${base}/file-deletion-requests/${flacKey}/review`)).body).toMatchObject({ trackId: String(flacTrack), filename: "Netease-777001.flac", format: "flac" })
+      expect((await a.post(`${base}/file-deletion-requests/${flacKey}/confirm`, { token: flacReview.token, filename: "Netease-777001.flac" })).status).toBe(204)
+      expect(await Bun.file(flacFile).exists()).toBe(false)
     } finally { await legacyPool.end() }
   } finally { globalThis.fetch = originalFetch; process.env.PATH = previous; await app.dispose(); await fs.rm(tmp, { recursive: true, force: true }) }
 }, 60_000)

@@ -28,7 +28,6 @@ const load=Effect.fnUntraced(function*(sql:SqlClient.SqlClient,user:number,id:st
 
 export function neteaseRemovals(sql:SqlClient.SqlClient, guarded:<A,E>(id:string,task:Effect.Effect<A,E>)=>Effect.Effect<A,E|BadRequest>) {
   return importRemovals<NeteaseTarget,NeteaseExt>(sql,guarded,{
-    entity:"netease_track",
     load:(user,id,lock)=>load(sql,user,id,lock),
     verifyLegacy:(target,file)=>verifyNeteaseLegacy(target.songId,file),
     formatOf:t=>t.ext,
