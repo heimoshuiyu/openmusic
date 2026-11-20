@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useNavigate } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
 import { api, ApiError, type NeteaseInfo, type NeteaseTags, type TrackSummary } from "@/api/client"
 import { btnQuiet, inputClass } from "@/components/page"
-import { neteaseTagsDiff } from "@/imports/view-model"
+import { neteaseFormTags } from "@/imports/view-model"
 
 /** 网易云导入曲目的行级管理：用户点开才懒加载来源信息（不逐行探测）。
  *  404 = 这首不是网易云导入或当前账号不可管理；其余错误原样展示。 */
@@ -14,9 +15,10 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
   const [info, setInfo] = useState<NeteaseInfo | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [phase, setPhase] = useState<"loading" | "view" | "edit">("loading")
+  const [phase, setPhase] = useState<"loading" | "failed" | "view" | "edit">("loading")
   const [busy, setBusy] = useState(false)
   const toggle = useRef<HTMLButtonElement | null>(null)
+  const popover = useRef<HTMLDivElement | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -28,6 +30,8 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
       (value) => { if (mounted) { setInfo(value); setPhase("view") } },
       (cause) => {
         if (!mounted) return
+        // 失败进入明确 failed 相位：loading 文案与错误信息不再同显
+        setPhase("failed")
         setError(cause instanceof ApiError && cause.status === 404
           ? "这首曲目不是网易云导入，或你不具有权限管理它。"
           : cause instanceof Error && cause.message ? cause.message : "导入信息读取失败，请稍后重试。")
@@ -36,10 +40,13 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
     return () => { mounted = false }
   }, [open, info, trackId])
 
+  // 外点/Esc 只豁免本实例的 toggle 与弹层：点开另一行时旧弹层随之关闭（portal 后仍按 ref 判定）
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (!(event.target as HTMLElement).closest(".import-manage-popover, .import-manage-toggle")) setOpen(false)
+      const target = event.target as Node
+      if (popover.current?.contains(target) || toggle.current?.contains(target)) return
+      setOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false)
@@ -50,6 +57,18 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
       window.removeEventListener("mousedown", close)
       window.removeEventListener("keydown", onKey)
     }
+  }, [open])
+
+  // 弹层锚定在打开瞬间的行位置：祖先（虚拟列表滚动容器）一滚就关闭，绝不悬浮错位。
+  // 弹层自身滚动除外（capture 阶段按 target 判定）。
+  useEffect(() => {
+    if (!open) return
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest(".import-manage-popover")) return
+      setOpen(false)
+    }
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true })
+    return () => window.removeEventListener("scroll", onScroll, { capture: true })
   }, [open])
 
   async function unindex() {
@@ -117,15 +136,16 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
       >
         <Pencil className="h-4 w-4" />
       </button>
-      {open && (
+      {open && createPortal(
         <div
+          ref={popover}
           role="dialog"
           aria-label="导入管理"
           className="import-manage-popover fixed z-50 w-80 max-h-96 overflow-y-auto rounded-md border border-line bg-panel p-3 shadow-xl"
           style={{ left: Math.min(anchor.x, Math.max(8, window.innerWidth - 328)), top: anchor.y }}
         >
           {phase === "loading" && <p className="text-xs text-dim">正在读取导入信息…</p>}
-          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+          {phase === "failed" && error && <p role="alert" className="text-xs text-danger">{error}</p>}
           {note && <p role="status" className="mb-2 text-xs text-accent">{note}</p>}
           {info && phase === "view" && (
             <NeteaseInfoBody
@@ -139,7 +159,9 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
           {info && phase === "edit" && (
             <NeteaseEditForm info={info} busy={busy} onCancel={() => setPhase("view")} onSubmit={(tags) => void saveTags(tags)} />
           )}
-        </div>
+        </div>,
+        // 行内 transform 会让 fixed 以该行为 containing block：portal 到 body 后视口坐标才成立
+        document.body,
       )}
     </>
   )
@@ -175,7 +197,7 @@ export function NeteaseInfoBody({
       </dl>
       {info.warnings && info.warnings.length > 0 && (
         <ul className="space-y-0.5 border-l-2 border-line pl-2 text-xs text-dim">
-          {info.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          {info.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}
         </ul>
       )}
       <div className="flex flex-col gap-2 pt-1">
@@ -200,7 +222,7 @@ export function TrackManageSlot({ track }: { track: TrackSummary }) {
   return <ImportManageMenu trackId={track.id} label={track.title} />
 }
 
-/** 元数据编辑表单：只提交改过的字段（diff 在 view-model.neteaseTagsDiff） */
+/** 元数据编辑表单：经 view-model.neteaseFormTags 只提交改过的字段（空位置字段=不改） */
 export function NeteaseEditForm({
   info,
   busy = false,
@@ -225,11 +247,8 @@ export function NeteaseEditForm({
       className="space-y-2 text-sm"
       onSubmit={(event) => {
         event.preventDefault()
-        onSubmit(neteaseTagsDiff(info, {
-          ...form,
-          trackNumber: form.trackNumber === "" ? null : Number(form.trackNumber),
-          discNumber: Number(form.discNumber),
-        }))
+        // 位置字段以原始字符串走 neteaseFormTags：空串=不改（修复 Number("")=0），越界同样省略
+        onSubmit(neteaseFormTags(info, form))
       }}
     >
       <h3 className="text-xs text-faint">编辑元数据（只提交改过的字段）</h3>

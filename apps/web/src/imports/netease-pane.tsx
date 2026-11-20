@@ -1,14 +1,14 @@
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Download, Search as SearchIcon } from "lucide-react"
-import { api } from "@/api/client"
+import { api, type TrackSummary } from "@/api/client"
 import { usePlayer } from "@/player/store"
 import { btnPlay, btnQuiet, inputClass } from "@/components/page"
 import { ImportDestination, type ImportDestinationValue } from "@/imports/import-destination"
 import { ImportResultPanel } from "@/imports/import-result"
 import { ImportManageMenu } from "@/imports/import-manage"
 import {
-  neteaseKindHint, neteaseKindLabel, neteaseLink, neteaseOutcome, subdirectoryProblem,
+  neteaseKindHint, neteaseKindLabel, neteaseLink, neteaseOutcome, partitionTracks, subdirectoryProblem,
   type ImportOutcome,
 } from "@/imports/view-model"
 
@@ -60,12 +60,19 @@ export function NeteasePane() {
     if (resolving || !result || result.trackIds.length === 0) return
     setResolving(true); setError(null)
     try {
-      const tracks = await Promise.all(result.trackIds.map((id) => api.track(String(id))))
+      // 逐首独立解析：一首失败不拖垮其余，失败数如实展示
+      const settled = await Promise.allSettled(result.trackIds.map((id) => api.track(String(id))))
+      const { tracks, failed } = partitionTracks<TrackSummary>(settled)
+      if (tracks.length === 0) {
+        setError("未能取得曲目信息，无法播放。")
+        return
+      }
       const player = usePlayer.getState()
       if (kind === "play-now") player.playNow(tracks)
       else player.enqueue(tracks)
+      if (failed > 0) setError(`${failed} 首的曲目信息读取失败，已跳过；其余照常${kind === "play-now" ? "播放" : "入队"}。`)
     } catch {
-      setError("未能取得曲目信息，无法播放。")
+      setError("未能把曲目交给播放器。")
     } finally {
       setResolving(false)
     }

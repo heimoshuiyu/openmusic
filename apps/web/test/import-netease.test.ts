@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ApiError, type NeteaseImportResult, type NeteaseInfo } from "../src/api/client"
 import {
-  neteaseLink, neteaseOutcome, neteaseTagsDiff, resolveDeletionReview, subdirectoryProblem,
+  neteaseFormTags, neteaseLink, neteaseOutcome, neteaseTagsDiff, partitionTracks, resolveDeletionReview, subdirectoryProblem,
 } from "../src/imports/view-model"
 
 test("客户端镜像服务端白名单：规范化重建网易云链接，绝不透传原始输入", () => {
@@ -79,7 +79,35 @@ const info: NeteaseInfo = {
   trackNumber: 3, discNumber: 1, hasCover: true,
 }
 
-test("元数据编辑 diff：只提交改动且非空的字段", () => {
+test("表单原始字符串 → tags：清空碟号等于不改（绝不发送 Number(\"\")=0），越界同样省略", () => {
+  // 只清空碟号，其余与当前一致：无任何字段被提交
+  expect(neteaseFormTags(info, {
+    title: "晴天", artist: "周杰伦", album: "叶惠美", albumArtist: "周杰伦", genre: "Pop",
+    trackNumber: "3", discNumber: "", cover: "",
+  })).toEqual({})
+  // 越界/垃圾位置输入一律省略，不把 0 或 10000 发给服务端
+  expect(neteaseFormTags(info, {
+    title: "晴天（Live版）", artist: "周杰伦", album: "叶惠美", albumArtist: "周杰伦", genre: "Pop",
+    trackNumber: "0", discNumber: "10000", cover: "",
+  })).toEqual({ title: "晴天（Live版）" })
+  // 合法改动的位置字段照常提交
+  expect(neteaseFormTags(info, {
+    title: "晴天", artist: "周杰伦", album: "叶惠美", albumArtist: "周杰伦", genre: "Pop",
+    trackNumber: " 5 ", discNumber: "2", cover: "netease",
+  })).toEqual({ trackNumber: 5, discNumber: 2, cover: "netease" })
+})
+
+test("allSettled 分区：一首失败不拖垮其余，全部失败才无法播放", async () => {
+  const settled = await Promise.allSettled([Promise.resolve(1), Promise.reject(new Error("a")), Promise.resolve(3), Promise.reject(new Error("b"))])
+  expect(partitionTracks(settled)).toEqual({ tracks: [1, 3], failed: 2 })
+  const allOk = await Promise.allSettled([Promise.resolve(1), Promise.resolve(2)])
+  expect(partitionTracks(allOk)).toEqual({ tracks: [1, 2], failed: 0 })
+  const allBad = await Promise.allSettled([Promise.reject(new Error("x"))])
+  expect(partitionTracks(allBad)).toEqual({ tracks: [], failed: 1 })
+  expect(partitionTracks([])).toEqual({ tracks: [], failed: 0 })
+})
+
+test("neteaseTagsDiff:元数据编辑 diff：只提交改动且非空的字段", () => {
   expect(neteaseTagsDiff(info, {
     title: "晴天", artist: "周杰伦", album: "叶惠美", albumArtist: "周杰伦", genre: "Pop",
     trackNumber: 3, discNumber: 1, cover: "",

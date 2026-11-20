@@ -100,3 +100,18 @@ test("VIP 候选行与管理插槽在同一结果页共存：文件行都能挂�
   expect(list).toContain('data-manage="43:Netease-2606227455.mp3"')
   expect(list).toContain("歌单")
 })
+
+test("重复的 failures/warnings（同歌单内同 songId 出现两次）全数渲染，不被重复键吞行", () => {
+  const dup = renderToStaticMarkup(<ImportResultPanel outcome={outcome({
+    kind: "歌单", state: "partial", total: 3, imported: 1, failed: 2, trackIds: [42],
+    failures: [{ id: "5264842", reason: "导入失败：网络、来源或目录权限问题。" }, { id: "5264842", reason: "导入失败：网络、来源或目录权限问题。" }],
+    warnings: [{ id: "5264842", message: "未取得歌词。" }, { id: "5264842", message: "未取得歌词。" }],
+  })} />)
+  expect(dup.match(/未导入（2）/g)).toHaveLength(1)
+  expect(dup.match(/导入失败：网络、来源或目录权限问题。/g)).toHaveLength(2)
+  expect(dup.match(/未取得歌词。/g)).toHaveLength(2)
+  expect(dup.match(/提示（2）/g)).toHaveLength(1)
+  // 管理正文里的重复 warnings 同样全数渲染
+  const body = renderToStaticMarkup(<NeteaseInfoBody info={{ ...info, warnings: ["未取得歌词。", "未取得歌词。"] }} />)
+  expect(body.match(/未取得歌词。/g)).toHaveLength(2)
+})

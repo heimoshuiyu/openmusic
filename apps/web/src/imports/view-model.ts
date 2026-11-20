@@ -124,6 +124,42 @@ export function neteaseTagsDiff(
   return tags
 }
 
+export interface NeteaseEditFormValues {
+  title: string
+  artist: string
+  album: string
+  albumArtist: string
+  genre: string
+  /** 原始输入字符串：位置字段空串/越界一律省略（等于“不改”），绝不发送 0 或垃圾值 */
+  trackNumber: string
+  discNumber: string
+  cover: string
+}
+
+/** 编辑表单原始字符串 → PATCH tags。空串位置字段省略（修复 Number("")=0 的隐患），越界同样省略。 */
+export function neteaseFormTags(info: NeteaseInfo, values: NeteaseEditFormValues): NeteaseTags {
+  const position = (raw: string): number | null => {
+    if (raw.trim() === "") return null
+    const value = Number(raw)
+    return Number.isSafeInteger(value) && value >= 1 && value <= 9999 ? value : null
+  }
+  return neteaseTagsDiff(info, {
+    title: values.title, artist: values.artist, album: values.album, albumArtist: values.albumArtist, genre: values.genre,
+    trackNumber: position(values.trackNumber), discNumber: position(values.discNumber), cover: values.cover,
+  })
+}
+
+/** 导入成功后的曲目解析：逐首独立，一首失败不拖垮其余（allSettled 分区）。 */
+export function partitionTracks<T>(settled: ReadonlyArray<PromiseSettledResult<T>>): { tracks: T[]; failed: number } {
+  const tracks: T[] = []
+  let failed = 0
+  for (const item of settled) {
+    if (item.status === "fulfilled") tracks.push(item.value)
+    else failed++
+  }
+  return { tracks, failed }
+}
+
 export type DeletionSource = "youtube" | "netease"
 
 export type ResolvedReview<T> = { source: DeletionSource; review: T } | { missing: true; message: string }

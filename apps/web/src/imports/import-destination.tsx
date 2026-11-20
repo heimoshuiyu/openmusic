@@ -23,9 +23,12 @@ export function ImportDestination({
 }) {
   const { data: folders } = useQuery({ queryKey: ["netease-folders"], queryFn: api.neteaseFolders })
   const [browsing, setBrowsing] = useState(false)
+  // 浏览路径独立于手输框：只在显式动作（打开浏览/点选子目录/按输入路径浏览）时变化，
+  // 打字绝不触发请求——请求次数与用户显式动作一一对应。
+  const [browsePath, setBrowsePath] = useState("")
   const children = useQuery({
-    queryKey: ["netease-subdirectories", value.folderId, value.subdirectory],
-    queryFn: () => api.neteaseSubdirectories(value.folderId, value.subdirectory),
+    queryKey: ["netease-subdirectories", value.folderId, browsePath],
+    queryFn: () => api.neteaseSubdirectories(value.folderId, browsePath),
     enabled: browsing && !disabled && value.folderId !== "",
   })
   const problem = subdirectoryProblem(value.subdirectory)
@@ -40,7 +43,10 @@ export function ImportDestination({
           className={`${inputClass} min-w-48 flex-1`}
           value={value.folderId}
           disabled={disabled}
-          onChange={(event) => onChange({ ...value, folderId: event.target.value, subdirectory: "" })}
+          onChange={(event) => {
+            onChange({ ...value, folderId: event.target.value, subdirectory: "" })
+            setBrowsePath("")
+          }}
         >
           <option value="">选择曲库目录…</option>
           {(folders ?? []).map((folder) => (
@@ -54,7 +60,10 @@ export function ImportDestination({
           className="inline-flex min-h-10 items-center gap-2 border border-line bg-shell px-3 text-sm text-paper transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
           disabled={disabled || value.folderId === "" || problem !== null}
           aria-expanded={browsing}
-          onClick={() => setBrowsing((open) => !open)}
+          onClick={() => {
+            if (!browsing) setBrowsePath(value.subdirectory)
+            setBrowsing((open) => !open)
+          }}
         >
           <FolderOpen className="h-4 w-4" />
           浏览子目录
@@ -81,6 +90,21 @@ export function ImportDestination({
       </div>
       {browsing && value.folderId !== "" && (
         <div className="rounded-md border border-line/60 bg-shell p-2">
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <p className="min-w-0 flex-1 truncate font-readout text-[11px] text-faint">
+              正在浏览：{browsePath === "" ? "根目录" : browsePath}
+            </p>
+            {browsePath !== value.subdirectory && (
+              <button
+                type="button"
+                className="shrink-0 text-[11px] text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={problem !== null}
+                onClick={() => setBrowsePath(value.subdirectory)}
+              >
+                按输入路径浏览
+              </button>
+            )}
+          </div>
           {children.isFetching ? (
             <p className="px-1 py-1.5 text-xs text-dim">正在读取子目录…</p>
           ) : children.error ? (
@@ -98,6 +122,8 @@ export function ImportDestination({
                     className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-raised/70"
                     onClick={() => {
                       onChange({ ...value, subdirectory: directory })
+                      // 点选即显式钻入下一层：浏览路径与手输框同步推进
+                      setBrowsePath(directory)
                     }}
                   >
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
@@ -114,7 +140,10 @@ export function ImportDestination({
             <button
               type="button"
               className="px-1.5 pt-1 text-xs text-accent hover:underline"
-              onClick={() => onChange({ ...value, subdirectory: "" })}
+              onClick={() => {
+                onChange({ ...value, subdirectory: "" })
+                setBrowsePath("")
+              }}
             >
               回到根目录
             </button>

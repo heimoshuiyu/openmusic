@@ -53,8 +53,9 @@ export function ImportResultPanel({
         <div>
           <h3 className="mb-1 text-xs font-medium text-danger">未导入（{outcome.failures.length}）</h3>
           <ul className="space-y-0.5 text-xs text-danger">
-            {outcome.failures.map((failure) => (
-              <li key={failure.id} className="break-words">
+            {outcome.failures.map((failure, index) => (
+              // 同一 songId 可在歌单里出现多次：key 带序号避免重复键
+              <li key={`${index}:${failure.id}`} className="break-words">
                 <span className="tnum">{failure.id}</span> · {failure.reason}
               </li>
             ))}
@@ -65,8 +66,8 @@ export function ImportResultPanel({
         <div>
           <h3 className="mb-1 text-xs font-medium text-dim">提示（{outcome.warnings.length}）</h3>
           <ul className="space-y-0.5 text-xs text-dim">
-            {outcome.warnings.map((warning) => (
-              <li key={warning.id + warning.message} className="break-words">
+            {outcome.warnings.map((warning, index) => (
+              <li key={`${index}:${warning.id}:${warning.message}`} className="break-words">
                 <span className="tnum">{warning.id}</span> · {warning.message}
               </li>
             ))}
