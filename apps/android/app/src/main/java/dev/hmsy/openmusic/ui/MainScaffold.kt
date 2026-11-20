@@ -35,6 +35,8 @@ import dev.hmsy.openmusic.ui.screens.ArtistScreen
 import dev.hmsy.openmusic.ui.screens.FavoritesScreen
 import dev.hmsy.openmusic.ui.screens.HomeScreen
 import dev.hmsy.openmusic.ui.screens.LibraryScreen
+import dev.hmsy.openmusic.ui.screens.NeteaseImportScreen
+import dev.hmsy.openmusic.ui.screens.NeteaseTrackScreen
 import dev.hmsy.openmusic.ui.screens.PlaylistScreen
 import dev.hmsy.openmusic.ui.screens.SearchScreen
 import dev.hmsy.openmusic.ui.screens.SettingsScreen
@@ -53,6 +55,10 @@ class UiActions(
   /** 版本徽标/长按「选择版本」：弹版本选择器（swap 起播语义） */
   val pickVersion: (track: TrackSummary, context: List<TrackSummary>, index: Int) -> Unit,
   val logout: () -> Unit,
+  /** 网易云导入屏（设置 → 曲库入口） */
+  val openNeteaseImport: () -> Unit,
+  /** 网易云来源管理屏（按曲目 id；非网易云曲目由屏内懒加载 404 明确提示） */
+  val openNeteaseTrack: (String) -> Unit,
 )
 
 private const val ASSISTANT_ROUTE = "assistant"
@@ -94,6 +100,7 @@ fun BottomBar(
 fun MainScaffold(
   nav: NavHostController,
   actions: UiActions,
+  netease: NeteaseRunner,
   expired: ()->Unit,
   miniPlayer: @Composable () -> Unit,
   nowPlaying: @Composable () -> Unit,
@@ -130,6 +137,19 @@ fun MainScaffold(
           }
           composable("settings") { SettingsScreen(actions, onManage = { nav.navigate("server-admin") { launchSingleTop = true } }) }
           composable("server-admin") { ServerAdminScreen(onBack = { nav.popBackStack() }, onExpired = expired) }
+          composable("netease-import") {
+            NeteaseImportScreen(
+              runner = netease,
+              openTrack = actions.openNeteaseTrack,
+              onBack = { nav.popBackStack() },
+            )
+          }
+          composable("netease-track/{id}") { entry ->
+            NeteaseTrackScreen(
+              trackId = entry.arguments?.getString("id") ?: "",
+              onBack = { nav.popBackStack() },
+            )
+          }
         }
       }
       miniPlayer()

@@ -81,6 +81,19 @@ fun SettingsScreen(actions: UiActions, onManage: () -> Unit) {
       else -> "尚未扫描"
     }
     SettingsRow(label = "状态", value = scanText)
+
+    // 网易云导入入口（登录即可用；不需要管理员）
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+      androidx.compose.material3.Button(
+        onClick = actions.openNeteaseImport,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Om.Paper, contentColor = Om.Shell),
+        shape = RoundedCornerShape(2.dp),
+      ) {
+        Text("从网易云导入", style = OmType.Row)
+      }
+      Text("搜索或粘贴链接导入单曲 / 歌单 / 专辑 / 歌手热门（匿名 MP3 ≤320k，VIP 跳过，≤25 首）", style = OmType.Meta, color = Om.Dim)
+    }
+
     if (me?.isAdmin == true) Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
       androidx.compose.material3.Button(
         onClick = onManage,
