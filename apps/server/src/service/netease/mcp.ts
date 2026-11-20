@@ -14,6 +14,9 @@ export interface NeteaseMcp {
 
 const trackIdProp = { type: "integer", minimum: 1 }
 
+/** 错误文案按工具家族分类的显式名单——不用 *_netease 后缀推断，防未来新增工具误入管理类文案。 */
+const managementTools = new Set(["get_metadata_netease", "edit_metadata_netease", "remove_from_library_netease", "request_file_deletion_netease"])
+
 /** 与 domain NeteaseTags 同形（服务端仍以 validNeteaseTags 强校验，这里只是模型可见面）。 */
 const metadataSchema = { type: "object" as const, additionalProperties: false, properties: {
   ...Object.fromEntries(["title", "artist", "album", "albumArtist", "genre"].map(k => [k, { type: "string", maxLength: 300 }])),
@@ -85,17 +88,20 @@ export function neteaseMcp(imports: NeteaseImports["Service"], ownerOf: (id: str
         return reply("工具或参数不正确", true)
       } catch (e) {
         if (e instanceof Error && e.name === "BadRequest") return reply(e.message, true)
-        // search/import 保持既有文案；管理工具的 NotFound 是曲目维度，如实指向 trackId。
-        const managed = r.params.name.endsWith("_netease") && r.params.name !== "search_netease" && r.params.name !== "start_import_netease"
-        if (managed) return reply(e instanceof Error && e.name === "NotFound" ? "曲目不可用或不存在，请核对 trackId。" : "网易云管理操作不可用，请稍后重试。", true)
+        // search/import 保持既有文案；管理四件的 NotFound 是曲目维度，如实指向 trackId。
+        if (managementTools.has(r.params.name))
+          return reply(e instanceof Error && e.name === "NotFound" ? "曲目不可用或不存在，请核对 trackId。" : "网易云管理操作不可用，请稍后重试。", true)
         return reply(e instanceof Error && e.name === "NotFound" ? "目录或会话不可用，请重新查看曲库目录。" : "网易云导入不可用，请检查链接与网络连接。", true)
       }
     })
     return mcp
-  }, { keepAliveMs: 5_000, maxRequestBodySize: 1024 * 1024 })
+    // 6 MiB 与 youtube MCP 及外层 Bun listener 对齐：domain NeteaseTags.cover 允许
+    // ≤5.6M 字符的 data:image，1 MiB 会在业务校验前把合法编辑请求挡成 413。
+  }, { keepAliveMs: 5_000, maxRequestBodySize: 6 * 1024 * 1024 })
   return {
     server,
-    // The host interrupt button also cancels this session's pending import.
+    // The host interrupt button covers only pending imports; the management four are
+    // bounded/transactional service calls and never join the abort set.
     interrupt: (sessionID: string) => { for (const call of pending.get(sessionID) ?? []) call.abort() },
     close: async () => { shutdown.abort(); await server.close() },
   }

@@ -295,6 +295,19 @@ test("错误映射：BadRequest 原文；导入类 NotFound→目录文案；管
   })
 })
 
+test("请求体上限：>1 MiB 且 <6 MiB 的合法 edit_metadata 请求越过传输层到达业务校验与 handler", async () => {
+  const { service, calls } = makeFake()
+  await withMcp(service, async mcp => {
+    // cover 是 domain NeteaseTags 允许的 data:image（≤5.6M 字符）；2M 字符的请求体
+    // 旧 1 MiB 传输上限会在业务校验前被 413。fake edit 不触网不下载图片。
+    const cover = `data:image/jpeg;base64,${"A".repeat(2 * 1024 * 1024)}`
+    const out = payload(await callTool(mcp, "edit_metadata_netease", { trackId: 42, metadata: { cover } }))
+    expect(out.isError).toBe(false)
+    expect(out.value).toEqual(editedInfo)
+    expect(String((calls[0]!.args as { tags: { cover?: string } }).tags.cover).length).toBeGreaterThan(2 * 1024 * 1024)
+  })
+})
+
 test("interrupt：宿主打断按钮中止该会话 pending 的 start_import 调用", async () => {
   let aborted = false
   const hanging = Effect.promise<NeteaseImportResult>((signal) => new Promise((_, reject) => {

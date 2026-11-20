@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import * as fs from "node:fs/promises"
+import path from "node:path"
 
 /** netease-import skill 的官方历史 seed（sha256，逐字节）。seed 策略：
  *  不存在才写（COPYFILE_EXCL），存在时只迁移命中这些精确旧种子的副本；任何
@@ -15,10 +16,25 @@ export const STALE_NETEASE_SEEDS: ReadonlyArray<string> = [
 
 /** seed 目录里已存在同名 skill 时决定去留：命中已知官方旧种子 → 用 bundled 版覆盖并返回
  *  true；否则（用户手改或已是新版）不动一个字节并返回 false。独立成函数以便单测
- *  直接覆盖「干净 seed / 旧 seed 升级 / 手改保留」三条路径。 */
+ *  直接覆盖「旧 seed 升级 / 手改保留」两条路径。 */
 export async function migrateSeededSkill(existing: string, bundled: string, stale: ReadonlyArray<string> = STALE_NETEASE_SEEDS): Promise<boolean> {
   const checksum = createHash("sha256").update(await fs.readFile(existing)).digest("hex")
   if (!stale.includes(checksum)) return false
   await fs.copyFile(bundled, existing)
   return true
+}
+
+/** seed 入口（embedded.seedSkill 调用）：目录不存在 → COPYFILE_EXCL 落 bundled 原文；
+ *  已存在 → 交给 migrateSeededSkill（旧种子升级、手改保留）。真实 IO 错误（bundled
+ *  缺失、权限等非 EEXIST）原样抛出，走 embedded 既有的 hostError 路径——安装损坏
+ *  必须显性失败，绝不静默装作 seed 成功。 */
+export async function seedNeteaseSkill(agentHome: string, bundled: string = path.join(import.meta.dir, "skills/netease-import/SKILL.md")): Promise<void> {
+  const target = path.join(agentHome, "skills/netease-import/SKILL.md")
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  try {
+    await fs.copyFile(bundled, target, fs.constants.COPYFILE_EXCL)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+    await migrateSeededSkill(target, bundled)
+  }
 }

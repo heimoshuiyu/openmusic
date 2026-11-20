@@ -4,13 +4,14 @@ import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
-import { migrateSeededSkill, STALE_NETEASE_SEEDS } from "./skill-seed"
+import { migrateSeededSkill, seedNeteaseSkill, STALE_NETEASE_SEEDS } from "./skill-seed"
 
-/** netease-import skill 迁移决策单测（免 DB）：干净 seed 由 embedded.seedSkill 的
- *  COPYFILE_EXCL 路径覆盖（agent-embed 集成里断言）；这里钉住「已存在」时的三分支：
+/** netease-import skill seed/迁移单测（免 DB）。迁移决策（migrateSeededSkill）三条：
  *  ① 官方旧种子（含 d6b8e2d 双后端中间版）逐字节命中 → 升级到 bundled；
  *  ② 手改副本（任何 checksum 不匹配）原样保留；
- *  ③ 当前 bundled 版自身不进 stale 清单（防止升级后的新 seed 被反复重写）。 */
+ *  ③ 当前 bundled 版自身不进 stale 清单（防止升级后的新 seed 被反复重写）。
+ *  入口（seedNeteaseSkill，embedded 同款）另钉：干净目录落 bundled、入口触发迁移、
+ *  以及非 EEXIST 的真实 IO 错误原样抛出（安装损坏必须显性失败，见 embedded 的 hostError 路径）。 */
 
 const sha256 = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex")
 
@@ -52,5 +53,31 @@ test("用户手改副本（旧 seed + 自定义一行 / 任意内容）逐字节
       expect(await migrateSeededSkill(existing, bundled)).toBe(false)
       expect(await fs.readFile(existing, "utf8")).toEqual(tuned)
     }
+  })
+})
+
+test("seed 入口（embedded 同款）：干净目录落 bundled；旧种子升级、手改保留；非 EEXIST IO 错误原样抛出", async () => {
+  await withTemp(async dir => {
+    const bundled = path.join(import.meta.dir, "skills/netease-import/SKILL.md")
+    const skillOf = (home: string) => path.join(home, "skills/netease-import/SKILL.md")
+    // 干净 agent-home → COPYFILE_EXCL 落 bundled 原文
+    const fresh = path.join(dir, "fresh-home")
+    await seedNeteaseSkill(fresh)
+    expect(await fs.readFile(skillOf(fresh), "utf8")).toEqual(await fs.readFile(bundled, "utf8"))
+    // 已存在官方旧种子 → 入口触发升级
+    const staleHome = path.join(dir, "stale-home")
+    await fs.mkdir(path.dirname(skillOf(staleHome)), { recursive: true })
+    await fs.writeFile(skillOf(staleHome), SEED_9039856)
+    await seedNeteaseSkill(staleHome)
+    expect(await fs.readFile(skillOf(staleHome), "utf8")).toEqual(await fs.readFile(bundled, "utf8"))
+    // 已存在手改副本 → 一字节不动
+    const tuned = SEED_D6B8E2D + "\n6. 我自己调教过的段落，不许覆盖。\n"
+    const tunedHome = path.join(dir, "tuned-home")
+    await fs.mkdir(path.dirname(skillOf(tunedHome)), { recursive: true })
+    await fs.writeFile(skillOf(tunedHome), tuned)
+    await seedNeteaseSkill(tunedHome)
+    expect(await fs.readFile(skillOf(tunedHome), "utf8")).toEqual(tuned)
+    // bundled 缺失（安装损坏）→ ENOENT 原样抛出，绝不静默装作 seed 成功
+    await expect(seedNeteaseSkill(fresh, path.join(dir, "missing-bundled.md"))).rejects.toThrow()
   })
 })

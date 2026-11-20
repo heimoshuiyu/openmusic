@@ -133,7 +133,7 @@ export class AgentService extends Context.Service<AgentService, {
 
 **权限 action 名（窄 allow-list 部署必须显式放行）**：Code Mode 工具的权限 action 是下划线全名——`netease_search_netease`、`netease_start_import_netease`、`netease_get_metadata_netease`、`netease_edit_metadata_netease`、`netease_remove_from_library_netease`、`netease_request_file_deletion_netease`（youtube/lyrics 同理，如 `youtube_start_import`）。**未匹配任何规则的 action 默认落到 `ask`，而内嵌宿主没有应答权限请求的通道**（事件桥只投影消息/工具/执行事件，无权限卡片）——落到 `ask` 的调用会挂起直到会话被 interrupt 或宿主关闭，表现为「助手卡死」而非报错。因此窄 allow-list 姿态在本部署形态下不可用：保持 `allow *` + 显式 deny（`edit/bash/write/shell/webfetch` deny、`websearch` allow）的清单，或为上面每个 action 显式写 `allow` 规则。
 
-`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知，以及管理四件的纪律（先 get 核对、edit 只传要改的字段、移出与删除都须用户明确要求、删除只给人工链接）。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。
+`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知，以及管理四件的纪律（先 get 核对、edit 只传要改的字段、移出与删除都须用户明确要求、删除只给人工链接）。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）——该 abort 只覆盖进行中的导入调用，管理四件是有界/事务化的短操作，不参与打断。
 
 skill seed 升级：bundled 文案演进时，seed 只对「逐字节等于已知官方旧种子」的副本做迁移（当前清单：d6b8e2d 双后端中间版与 9039856 匿名 v1，见 `service/agent/skill-seed.ts` 的 `STALE_NETEASE_SEEDS`）；任何 checksum 不匹配的实例视为用户手改，原样保留（skill Watcher 热刷新，手改即生效）。
 
