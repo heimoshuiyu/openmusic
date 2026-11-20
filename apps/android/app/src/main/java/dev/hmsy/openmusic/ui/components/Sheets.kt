@@ -47,6 +47,8 @@ fun TrackActionsSheet(
   onAddToPlaylist: () -> Unit,
   onToggleStar: () -> Unit,
   onVersions: () -> Unit = {},
+  /** 网易云来源管理：info 由目标屏用户触发后懒加载，非网易云曲目得到明确的 404 说明 */
+  onNetease: () -> Unit = {},
 ) {
   val starred = dev.hmsy.openmusic.ui.StarOverlay.rememberStarred(track.id, track.starred)
   ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Om.Panel) {
@@ -79,6 +81,7 @@ fun TrackActionsSheet(
       if ((track.versionCount ?: 1) > 1) {
         ActionRow(OmIcons.Layers, "选择版本（${track.versionCount} 份拷贝）") { onVersions() }
       }
+      ActionRow(OmIcons.Disc, "网易云来源…") { onNetease(); onDismiss() }
       ActionRow(
         if (starred) OmIcons.HeartFilled else OmIcons.Heart,
         if (starred) "取消收藏" else "收藏",

@@ -31,6 +31,7 @@ import dev.hmsy.openmusic.player.PlaybackService
 import dev.hmsy.openmusic.player.PlayerBus
 import dev.hmsy.openmusic.player.PlayerController
 import dev.hmsy.openmusic.ui.MainScaffold
+import dev.hmsy.openmusic.ui.NeteaseRunner
 import dev.hmsy.openmusic.ui.StarOverlay
 import dev.hmsy.openmusic.ui.UiActions
 import dev.hmsy.openmusic.ui.components.PlaylistPickerSheet
@@ -114,6 +115,9 @@ private fun MainArea(controller: PlayerController?, onLogout: () -> Unit) {
   var versionPick by remember { mutableStateOf<Triple<TrackSummary, List<TrackSummary>, Int>?>(null) }
   val bus by PlayerBus.state.collectAsState()
 
+  // 网易云导入运行器：挂在 MainArea（比 NavHost 目的地长命）——切 tab / 离开导入屏不取消等待
+  val netease = remember(scope) { NeteaseRunner(scope) }
+
   val actions = remember(controller) {
     UiActions(
       openAlbum = { id -> nav.navigate("album/$id") },
@@ -125,6 +129,8 @@ private fun MainArea(controller: PlayerController?, onLogout: () -> Unit) {
       enqueueNext = { track -> PlaybackService.enqueueNext(track) },
       trackActions = { track, list, index -> actionTrack = Triple(track, list, index) },
       pickVersion = { track, list, index -> versionPick = Triple(track, list, index) },
+      openNeteaseImport = { nav.navigate("netease-import") { launchSingleTop = true } },
+      openNeteaseTrack = { id -> nav.navigate("netease-track/$id") { launchSingleTop = true } },
       logout = {
         scope.launch {
           withContext(Dispatchers.IO) {
@@ -142,6 +148,7 @@ private fun MainArea(controller: PlayerController?, onLogout: () -> Unit) {
   MainScaffold(
     nav = nav,
     actions = actions,
+    netease = netease,
     expired = { scope.launch { OpenMusicApp.api.clearSession(); OpenMusicApp.settings.clearSession(); onLogout() } },
     miniPlayer = {
       if (bus.current != null) {
@@ -192,6 +199,7 @@ private fun MainArea(controller: PlayerController?, onLogout: () -> Unit) {
           onPlayNext = { PlaybackService.enqueueNext(track) },
           onEnqueue = { PlaybackService.enqueue(listOf(track)) },
           onAddToPlaylist = { showPicker = true },
+          onNetease = { actions.openNeteaseTrack(track.id) },
           onToggleStar = {
             StarOverlay.toggle(
               track.id, StarOverlay.isStarred(track.id, track.starred),
