@@ -71,6 +71,18 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
     return () => window.removeEventListener("scroll", onScroll, { capture: true })
   }, [open])
 
+  // portal 把弹层挂在 body 末尾，Tab 会先穿完整页才到达：打开即把焦点收进弹层
+  // （容器 tabIndex=-1），任何关闭路径（Esc/外点/滚动/再点 toggle/整行卸载）都还给
+  // 本实例 toggle；ref 已被 React 摘除时 optional chaining 静默跳过，不抛错。
+  // preventScroll：聚焦本身绝不触发祖先滚动，不会被上面的滚动关闭误伤。
+  useEffect(() => {
+    if (!open) return
+    popover.current?.focus({ preventScroll: true })
+    return () => {
+      toggle.current?.focus({ preventScroll: true })
+    }
+  }, [open])
+
   async function unindex() {
     if (busy || !info) return
     if (!window.confirm(`把「${info.title}」移出共享曲库和歌单？\n原文件保留在服务器磁盘上；之后的扫描不会自动捡回。`)) return
@@ -141,6 +153,7 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
           ref={popover}
           role="dialog"
           aria-label="导入管理"
+          tabIndex={-1}
           className="import-manage-popover fixed z-50 w-80 max-h-96 overflow-y-auto rounded-md border border-line bg-panel p-3 shadow-xl"
           style={{ left: Math.min(anchor.x, Math.max(8, window.innerWidth - 328)), top: anchor.y }}
         >
