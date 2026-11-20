@@ -6,6 +6,7 @@ const starters = [
   ["点歌", "放点适合深夜的歌"],
   ["歌单", "把最近听的歌建成一个列表"],
   ["导入", "导入 YouTube 链接"],
+  ["网易云", "导入网易云链接"],
 ] as const
 
 export function StudioWelcome({ onPrompt, onCreate, creating }: {

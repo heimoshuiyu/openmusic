@@ -124,7 +124,7 @@ export class AgentService extends Context.Service<AgentService, {
 
 `netease` 与 `youtube`/`lyrics` 同一个回环 MCP 监听（`/netease`，由 `youtube` MCP 的 Bun.serve 挂载，同一 bearer），同样是宿主生命周期内的 Streamable HTTP + Code Mode。工具两个：`tools.netease.search_netease({query})` 只搜不下载（至多 5 个 `{title,artist,album,songId,url,vip}`）；`await tools.netease.start_import_netease({url,folderId,subdirectory?})` 在原调用中等待下载、时长校验、打标签和入库，返回终态（`state`/计数/`trackIds`/按 `songId` 的 `failures` 与 `warnings`）。目标目录与来源无关，复用 `tools.youtube.list_folders` / `list_subdirectories` 选择。
 
-`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。
+`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。除助手对话外，Web 端 `/imports` 页面直接消费 REST 端点（搜索/粘贴链接、目录选择、同步等终态与结果明细；工具时间线与既有行为不变），助手欢迎 starter 另提供「导入网易云链接」示例；管理类工具（`get_metadata_netease`/`edit_metadata_netease`/`remove_from_library_netease`/`request_file_deletion_netease`）沿用与 YouTube 同名语义。
 
 ## 5. Web 前端
 

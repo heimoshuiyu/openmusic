@@ -135,6 +135,9 @@ const categories: Record<string, string> = {
   music_search: "曲库查询", music_facets: "曲库查询", music_artist_top: "曲库查询", music_album_tracks: "曲库查询", music_random: "曲库查询",
   music_recent_plays: "收听记录", music_most_played: "收听记录", music_favorites: "收藏", music_star: "收藏",
   music_enqueue: "播放队列", music_play_now: "播放队列", music_playlist_create: "歌单", music_playlist_add: "歌单",
+  search_netease: "网易云搜索", start_import_netease: "网易云导入",
+  get_metadata_netease: "网易云元数据", edit_metadata_netease: "网易云元数据",
+  remove_from_library_netease: "移出曲库", request_file_deletion_netease: "删除申请",
 }
 
 export function describeTools(tools: readonly ToolEntry[]) {
