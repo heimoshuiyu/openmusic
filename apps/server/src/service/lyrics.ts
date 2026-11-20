@@ -70,8 +70,8 @@ export function lyricService(sql:SqlClient.SqlClient){
     return {trackId:id,mode:r.mode,lyricsId:r.lyrics_id,synced:result.lines.some(l=>l.startMs!==null),...result} satisfies TrackLyrics
   })
   const allowed=Effect.fnUntraced(function*(user:number,id:string){
-    const [row]=yield* sql`select u.is_admin or coalesce(y.imported_by=u.id,false) as allowed from tracks t join users u on u.id=${user}
-      left join youtube_imports y on y.track_id=t.id where t.id=${id}::bigint for update of t`
+    const [row]=yield* sql`select u.is_admin or coalesce(y.imported_by=u.id,false) or coalesce(n.imported_by=u.id,false) as allowed from tracks t join users u on u.id=${user}
+      left join youtube_imports y on y.track_id=t.id left join netease_imports n on n.track_id=t.id where t.id=${id}::bigint for update of t`
     if(!row)return yield* notFound('track',id)
     if(!row.allowed)return yield* new Forbidden({message:'只有管理员或该版本的导入者可以修改歌词。'})
   })

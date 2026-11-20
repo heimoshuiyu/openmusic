@@ -13,8 +13,10 @@ import { AuthApiLive, SessionApiLive, UsersApiLive } from "../src/http/api/auth"
 import { BrowseApiLive } from "../src/http/api/browse"
 import { LibraryApiLive } from "../src/http/api/library"
 import { YoutubeApiLive } from "../src/http/api/youtube"
+import { NeteaseApiLive } from "../src/http/api/netease"
 import { LyricsApiLive } from '../src/http/api/lyrics'
 import { YoutubeImports } from "../src/service/youtube/imports"
+import { NeteaseImports } from "../src/service/netease/imports"
 import { AgentApiLive } from "../src/http/api/agent"
 import { PlaysApiLive, PlaylistsApiLive, SocialApiLive } from "../src/http/api/social"
 import { SystemApiLive } from "../src/http/api/system"
@@ -57,6 +59,9 @@ export async function startServer() {
     agentEnabled: false,
     agentConfigPath: "",
     musicFoldersSeed: process.env.MUSIC_FOLDERS ?? "",
+    neteaseApiBase: "",
+    neteaseQuality: "exhigh",
+    neteaseRealIp: "",
   })
 
   const TestPg = PgClient.layer({ url: Redacted.make(TEST_DB_URL) })
@@ -77,6 +82,7 @@ export async function startServer() {
       PlaylistsApiLive.pipe(Layer.provide([SessionAuthLive, SqlProviderLive])),
       AgentApiLive.pipe(Layer.provide([SessionAuthLive, SqlProviderLive])),
       YoutubeApiLive.pipe(Layer.provide(SessionAuthLive)),
+      NeteaseApiLive.pipe(Layer.provide(SessionAuthLive)),
       LyricsApiLive.pipe(Layer.provide(SessionAuthLive)),
     ]),
   )
@@ -89,7 +95,7 @@ export async function startServer() {
     MediaRoutesLive,
     AgentEventsRoutesLive,
   ).pipe(
-    Layer.provide(YoutubeImports.layer), Layer.provide(Scanner.layer),
+    Layer.provide(YoutubeImports.layer), Layer.provide(NeteaseImports.layer), Layer.provide(Scanner.layer),
     Layer.provide(Auth.layer),
     Layer.provide(Stream.layer),
     Layer.provide(AgentServiceDisabled),

@@ -5,6 +5,7 @@ import { validTags } from "./metadata"
 import { lyricsMcp } from '../lyrics-mcp'
 import type { lyricService } from '../lyrics'
 import { CaptionSource, CaptionRead, youtubeFormats, type YoutubeFormat } from "../../domain/youtube"
+import type { NeteaseMcp } from "../netease/mcp"
 
 const captionSourceProps = {url:{type:"string",maxLength:2048},trackId:{type:"integer",minimum:1}}
 
@@ -16,7 +17,8 @@ const metadataSchema = {type:"object" as const,additionalProperties:false,proper
 
 /** Streamable HTTP MCP on an ephemeral loopback socket owned by the host scope.
  * The server-generated header authenticates transport; the SDK, not tool arguments, sets sessionID. */
-export function youtubeMcp(imports: YoutubeImports["Service"], lyrics:ReturnType<typeof lyricService>, ownerOf: (id:string)=>Promise<number|null>) {
+export function youtubeMcp(imports: YoutubeImports["Service"], lyrics:ReturnType<typeof lyricService>, ownerOf: (id:string)=>Promise<number|null>, netease?: NeteaseMcp) {
+  // The netese handler shares this loopback listener; its lifecycle stays with the embedded host.
   const authorization = `Bearer ${crypto.randomUUID()}`
   const shutdown = new AbortController()
   // A stateless MCP cancellation notification can arrive on a different HTTP exchange.
@@ -99,12 +101,13 @@ export function youtubeMcp(imports: YoutubeImports["Service"], lyrics:ReturnType
   const listener = Bun.serve({hostname:"127.0.0.1",port:0,idleTimeout:0,maxRequestBodySize:6*1024*1024,fetch(req){
     if (req.headers.has("origin") || req.headers.get("authorization")!==authorization) return new Response(null,{status:403})
     const path=new URL(req.url).pathname
+    if(netease && path==='/netease') return netease.server.fetch(req)
     return path==='/lyrics'?lyricsServer.fetch(req):path==='/mcp'?server.fetch(req):new Response(null,{status:404})
   }})
   const url=`http://127.0.0.1:${listener.port}/mcp`
   return {
     interrupt: (sessionID:string) => { for (const call of pending.get(sessionID) ?? []) call.abort() },
-    config: {mcp:{servers:{youtube:{type:"remote",url,oauth:false,codemode:true,headers:{Authorization:authorization}},lyrics:{type:'remote',url:new URL('/lyrics',url).href,oauth:false,codemode:true,headers:{Authorization:authorization}}}}},
+    config: {mcp:{servers:{youtube:{type:"remote",url,oauth:false,codemode:true,headers:{Authorization:authorization}},lyrics:{type:'remote',url:new URL('/lyrics',url).href,oauth:false,codemode:true,headers:{Authorization:authorization}},...(netease?{netease:{type:'remote',url:new URL('/netease',url).href,oauth:false,codemode:true,headers:{Authorization:authorization}}}:{})}}},
     close: async () => { shutdown.abort(); listener.stop(true); await Promise.all([server.close(),lyricsServer.close()]) },
   }
 }

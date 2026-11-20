@@ -11,8 +11,10 @@ import { BrowseApiLive } from "./http/api/browse"
 import { Api } from "./http/api/index"
 import { LibraryApiLive } from "./http/api/library"
 import { YoutubeApiLive } from "./http/api/youtube"
+import { NeteaseApiLive } from "./http/api/netease"
 import { LyricsApiLive } from './http/api/lyrics'
 import { YoutubeImports } from "./service/youtube/imports"
+import { NeteaseImports } from "./service/netease/imports"
 import { PlaysApiLive, PlaylistsApiLive, SocialApiLive } from "./http/api/social"
 import { SystemApiLive } from "./http/api/system"
 import { AgentEventsRoutesLive } from "./http/agent-events"
@@ -47,6 +49,7 @@ const ApiRoutes = HttpApiBuilder.layer(Api, {
     PlaylistsApiLive.pipe(Layer.provide([SessionAuthLive, SqlProviderLive])),
     AgentApiLive.pipe(Layer.provide([SessionAuthLive, SqlProviderLive])),
     YoutubeApiLive.pipe(Layer.provide(SessionAuthLive)),
+    NeteaseApiLive.pipe(Layer.provide(SessionAuthLive)),
     LyricsApiLive.pipe(Layer.provide(SessionAuthLive)),
   ]),
 )
@@ -90,6 +93,7 @@ const ServerLive = HttpRouter.serve(
   // v4 provide 语义：后 provide 的层包在外面，才够得着它的依赖（Layer 记忆化去重）
   Layer.provide(AgentRuntimeLive),
   Layer.provide(YoutubeImports.layer),
+  Layer.provide(NeteaseImports.layer),
   Layer.provide(Scanner.layer),
   Layer.provide(MigratorLive),
   Layer.provide(PgLive),

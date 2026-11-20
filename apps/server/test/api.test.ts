@@ -66,6 +66,9 @@ const TestCfg = Layer.succeed(AppConfig, {
   agentEnabled: false,
   agentConfigPath: "",
   musicFoldersSeed: "",
+  neteaseApiBase: "",
+  neteaseQuality: "exhigh",
+  neteaseRealIp: "",
 })
 
 /** SessionAuth 测试实现：不做 cookie 校验，直接注入可切换的 CurrentUser。

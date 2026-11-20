@@ -17,6 +17,8 @@ import { transcriber } from "./voice"
 import { answeredQuestion, questionService } from './questions'
 import { YoutubeImports } from "../youtube/imports"
 import { youtubeMcp } from "../youtube/mcp"
+import { NeteaseImports } from "../netease/imports"
+import { neteaseMcp } from "../netease/mcp"
 import { lyricService } from '../lyrics'
 import { musicTools, runMusicTool } from "./tools"
 
@@ -175,6 +177,12 @@ const seedSkill = (agentHome: string) =>
       } catch {
         await fs.writeFile(skillPath, EXPLORATION_SKILL, "utf8")
       }
+      // Netease import skill: seeded like youtube-metadata, never overwrites a tuned copy.
+      const neteaseSkill = path.join(agentHome, "skills/netease-import/SKILL.md")
+      await fs.mkdir(path.dirname(neteaseSkill), { recursive: true })
+      const bundledNetease = path.join(import.meta.dir, "skills/netease-import/SKILL.md")
+      await fs.copyFile(bundledNetease, neteaseSkill, fs.constants.COPYFILE_EXCL)
+        .catch(async (e: NodeJS.ErrnoException) => { if (e.code !== "EEXIST") throw e })
     },
     catch: hostError("探索技能 seed 失败（不影响宿主启动）"),
   })
@@ -191,8 +199,11 @@ export const agentServiceEmbedded =
       const appConfig = yield* AppConfig
       const sql = yield* SqlClient.SqlClient
       const imports = yield* YoutubeImports
-      const youtube = yield* Effect.acquireRelease(Effect.sync(() => youtubeMcp(imports, lyricService(sql), id => Effect.runPromise(
-        AgentSessionRepo.ownerOf(id).pipe(Effect.provideService(SqlClient.SqlClient, sql))))), mcp => Effect.promise(mcp.close))
+      const neteaseImports = yield* NeteaseImports
+      const ownerOf = (id:string) => Effect.runPromise(AgentSessionRepo.ownerOf(id).pipe(Effect.provideService(SqlClient.SqlClient, sql)))
+      // Same loopback listener as the YouTube MCP; the embedded host owns both lifecycles.
+      const netease = yield* Effect.acquireRelease(Effect.sync(() => neteaseMcp(neteaseImports, ownerOf)), mcp => Effect.promise(mcp.close))
+      const youtube = yield* Effect.acquireRelease(Effect.sync(() => youtubeMcp(imports, lyricService(sql), ownerOf, netease)), mcp => Effect.promise(mcp.close))
 
       // SqlError 等基础设施错误 → defect（与 handler 层 infra 同款）
       const infra = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, Exclude<E, SqlError.SqlError>, R> =>
@@ -410,7 +421,7 @@ export const agentServiceEmbedded =
             Effect.tryPromise({
               try: async () => {
                 try { await host.sessions.interrupt({ sessionID: row.id }) }
-                finally { youtube.interrupt(row.id) }
+                finally { youtube.interrupt(row.id); netease.interrupt(row.id) }
               },
               catch: hostError("打断失败"),
             })),

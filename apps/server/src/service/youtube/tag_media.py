@@ -12,20 +12,25 @@ from PIL import Image
 from io import BytesIO
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggopus import OggOpus
-from mutagen.flac import Picture
+from mutagen.flac import FLAC, Picture
 
 options = json.load(sys.stdin)
+# source: 'youtube' (default, unchanged behavior) or 'netease' (OPENMUSIC_NETEASE_ID provenance, mp3|flac only)
+source = options.get('source', 'youtube')
+if source not in ('youtube', 'netease'):
+    raise ValueError('unknown source')
 ext = options['ext']
-if ext not in ('mp3', 'opus', 'm4a', 'mp4'):
+allowed_ext = ('mp3', 'flac') if source == 'netease' else ('mp3', 'opus', 'm4a', 'mp4')
+if ext not in allowed_ext:
     raise ValueError('unsupported media type')
 audio = pathlib.Path('audio.' + ext)
 probe = json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=format_name:stream=codec_type,codec_name:stream_disposition=attached_pic','-of','json',str(audio)],timeout=8))
 streams = probe['streams']
-if not set(probe['format']['format_name'].split(',')).intersection({'opus':{'ogg'},'mp3':{'mp3'},'m4a':{'mov','mp4'},'mp4':{'mov','mp4'}}[ext]):
+if not set(probe['format']['format_name'].split(',')).intersection({'opus':{'ogg'},'mp3':{'mp3'},'m4a':{'mov','mp4'},'mp4':{'mov','mp4'},'flac':{'flac'}}[ext]):
     raise ValueError('container does not match requested format')
 ac = [s['codec_name'] for s in streams if s['codec_type'] == 'audio']
 vc = [s['codec_name'] for s in streams if s['codec_type'] == 'video' and not s['disposition']['attached_pic']]
-if ac != [{'opus':'opus','mp3':'mp3','m4a':'aac','mp4':'aac'}[ext]] or vc != (['h264'] if ext == 'mp4' else []):
+if ac != [{'opus':'opus','mp3':'mp3','m4a':'aac','mp4':'aac','flac':'flac'}[ext]] or vc != (['h264'] if ext == 'mp4' else []):
     raise ValueError('streams do not match requested format')
 values = options['tags']
 day = options.get('uploadDate')
@@ -47,18 +52,36 @@ def write_tags(audio):
   if ext == 'mp3':
     try: tags = ID3(audio, load_v1=False)
     except ID3NoHeaderError: tags = ID3()
-    url = 'https://www.youtube.com/watch?v=' + options['videoId']
-    if options.get('verifyLegacy') and not any(url == str(frame) for frame in tags.getall('TXXX') if frame.desc.lower() in ('purl', 'comment')):
-        raise ValueError('not a verified YouTube import')
+    if source == 'youtube':
+      url = 'https://www.youtube.com/watch?v=' + options['videoId']
+      if options.get('verifyLegacy') and not any(url == str(frame) for frame in tags.getall('TXXX') if frame.desc.lower() in ('purl', 'comment')):
+          raise ValueError('not a verified YouTube import')
     for key, frame in [('title', TIT2), ('artist', TPE1), ('albumArtist', TPE2), ('album', TALB), ('genre', TCON), ('trackNumber', TRCK), ('discNumber', TPOS)]:
         if key in values: tags.setall(frame.__name__, [frame(encoding=3, text=[str(values[key])])])
     if day:
-        tags.setall('TDRC', [TDRC(encoding=3, text=[day])]); tags.add(TXXX(encoding=3, desc='OPENMUSIC_YOUTUBE_UPLOAD_DATE', text=[day]))
+        tags.setall('TDRC', [TDRC(encoding=3, text=[day])])
+        if source == 'youtube': tags.add(TXXX(encoding=3, desc='OPENMUSIC_YOUTUBE_UPLOAD_DATE', text=[day]))
     elif options.get('newImport'): tags.delall('TDRC')
-    tags.add(TXXX(encoding=3, desc='OPENMUSIC_YOUTUBE_ID', text=[options['videoId']]))
+    if source == 'youtube': tags.add(TXXX(encoding=3, desc='OPENMUSIC_YOUTUBE_ID', text=[options['videoId']]))
+    else: tags.add(TXXX(encoding=3, desc='OPENMUSIC_NETEASE_ID', text=[options['songId']]))
     if jpeg: tags.setall('APIC', [APIC(encoding=3, mime='image/jpeg', type=3, desc='Front cover', data=jpeg)])
     tags.save(audio, v1=0, v2_version=4)
     genre = str(tags['TCON']) if 'TCON' in tags else None
+  elif source == 'netease':
+    flac = FLAC(audio)
+    if flac.tags is None: flac.add_tags()
+    tags = flac.tags
+    for key in ('title', 'artist', 'albumArtist', 'album', 'genre', 'trackNumber', 'discNumber'):
+      if key in values: tags[key.lower()] = [str(values[key])]
+    if day: tags['date'] = [day]
+    elif options.get('newImport') and 'date' in tags: del tags['date']
+    tags['OPENMUSIC_NETEASE_ID'] = [options['songId']]
+    if jpeg:
+      flac.clear_pictures()
+      picture = Picture(); picture.type = 3; picture.mime = 'image/jpeg'; picture.data = jpeg
+      flac.add_picture(picture)
+    flac.save()
+    genre = tags.get('genre', [None])[0]
   else:
     if options.get('verifyLegacy'): raise ValueError('provenance required')
     mp4 = ext != 'opus'

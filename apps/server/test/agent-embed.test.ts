@@ -13,6 +13,7 @@ import { AppConfig } from "../src/config"
 import { AgentSessionRepo } from "../src/repo/agent-sessions"
 import { agentServiceEmbedded } from "../src/service/agent/embedded"
 import { YoutubeImports } from "../src/service/youtube/imports"
+import { NeteaseImports } from "../src/service/netease/imports"
 import { Scanner } from "../src/service/scanner"
 import { AgentService, type AgentEvent } from "../src/service/agent/agent-service"
 import { AgentEventsRoutesLive } from "../src/http/agent-events"
@@ -217,6 +218,9 @@ beforeAll(async () => {
     agentEnabled: true,
     agentConfigPath: "",
     musicFoldersSeed: "",
+    neteaseApiBase: "",
+    neteaseQuality: "exhigh",
+    neteaseRealIp: "",
   })
 
   scope = Effect.runSync(Scope.make())
@@ -229,7 +233,7 @@ beforeAll(async () => {
   const context = await Effect.runPromise(
     Layer.buildWithScope(
       agentServiceEmbedded([mockProviderPlugin]).pipe(
-        Layer.provide(YoutubeImports.layer), Layer.provide(Scanner.layer),
+        Layer.provide(YoutubeImports.layer), Layer.provide(NeteaseImports.layer), Layer.provide(Scanner.layer),
         Layer.provide(TestAppConfig),
         Layer.provide(Layer.succeedContext(sqlContext)),
       ) as unknown as Layer.Layer<AgentService>,
