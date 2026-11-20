@@ -212,6 +212,19 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 
 `kind` 为 `song/playlist/album/artist`；每首实际音质档位存于 `netease_imports.quality`（匿名来源为 MP3 ≤320k）。Single-flight 与 YouTube 相同：每用户 1 并发、全站 2；搜索全站 4；相同用户/会话/URL/目标的并发请求共享终态；无任务列表。
 
+以下管理端点与 YouTube 组对齐（语义见 docs/04 YouTube 节；删除票据规则逐条相同）：
+
+- `GET /folders`：`[{id,name,path,writable}]`，与 `GET /api/v1/music-folders` 同源数据、附可写性探测。
+- `GET /subdirectories?folderId=&subdirectory=`：目标目录下一层 `{directories,truncated}`；不递归、拒符号链接，非法/不存在 422。
+- `GET /tracks/:id/metadata`：`NeteaseInfo{trackId,songId,quality,format,filename,title,artist,album,albumArtist,genre,trackNumber,discNumber,hasCover,warnings?}`。任意登录用户可读（纯 DB 读）；`quality` 是导入时探针得到的交付档位快照（`standard/higher/exhigh/lossless`），重扫不改写；无 `coverSource/uploadDate`——发行日即专辑年份，走 `albums.year`，与 YouTube 的逐曲 `upload_date` 语义刻意不同。
+- `PATCH /tracks/:id/metadata`：payload 为 `NeteaseTags`（`title/artist/album/albumArtist/genre/trackNumber/discNumber` 全可选 + `cover`）。`cover` 接受 `"netease"`（回源该曲详情里的专辑封面）、`*.music.126.net` 图片 URL（http 归一 https）或 `data:image/jpeg|png|webp` 内联图（原图 ≤4 MiB）；其他 host/本地路径一律 422。仅**导入者或管理员**可改，其余 404 不泄露存在性。成功后标签内嵌进文件（staging 拷贝 + inode 复验 + 失败回滚，同 YouTube 编辑）；发布走 `Scanner.indexImport` 固定文本覆盖值（重扫存活），**不改写 `netease_imports`**——管理员代编辑不会挪走 `imported_by`，`quality` 快照不动；发行日标签保留、专辑年份不变。标签写不进文件时可降级 `dbOnly` 并以 `warnings` 如实回报（要求了封面则绝不降级）。
+- 无 `netease_imports` 行的 legacy 文件（如曲目行被扫描器重建）：仅管理员可管理，且一切写/删入口先核验文件内 `OPENMUSIC_NETEASE_ID` 标签等于文件名 songId（mp3 的 TXXX / flac 的同名 vorbis 键），不符 fail closed。
+- `DELETE /tracks/:id/library-entry`：204。从曲库/歌单/收藏移除该 trackId 的条目，**保留磁盘文件**，写 `library_exclusions` 防重扫复活；导入者或管理员。
+- `POST /tracks/:id/file-deletion-requests`：`{requestId,reviewPath:"/review-deletion/<uuid>",expiresAt}`（5 分钟，不含 token；同 (属主,trackId) 自动换票，全站 256 张上限）。
+- `POST /file-deletion-requests/:key/review`：`{trackId,title,artist,filename,format:"mp3"|"flac",path,sizeBytes,expiresAt,token}`，仅票据属主。
+- `POST /file-deletion-requests/:key/confirm {token,filename}`：204。**必须由票据属主本人在 5 分钟内逐字输入完整文件名**；确认时复验指纹（dev:ino:size:mtimeNs）、行版本（xmin）与注册根重叠，PostgreSQL 提交成功后才 unlink，失败补偿只回链、保留 `.openmusic-delete-*` 备份。仅作用于该 trackId，绝不按路径/歌单/批量删除。
+- `DELETE /file-deletion-requests/:key`：204，撤销申请。
+
 ## 2. 链接解析与规模
 
 只接受 music.163.com 的 `song/playlist/album/artist`（含 `#/song`、`y.` 前缀、`m/song/<id>` 变体；ID 为 1–20 位数字），**规范化重建后才访问**，绝不透传用户原始 URL；其他 host/路径一律 422。歌单/专辑最多 25 首：超限整组 422（歌单请拆分、专辑请逐首）；歌手热门固定取前 25 首（`singer` 来源本身只有热门 ~50 首）并记 warning。逐首独立处理，一首失败继续下一首，`failures` 按 `songId` 逐条说明。

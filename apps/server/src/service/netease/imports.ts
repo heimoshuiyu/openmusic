@@ -2,7 +2,7 @@ import { Context, Deferred, Effect, Layer } from "effect"
 import { join } from "node:path"
 import { SqlClient } from "effect/unstable/sql"
 import { BadRequest, notFound, type NotFound } from "../../domain/errors"
-import type { NeteaseCandidate, NeteaseImportResult } from "../../domain/netease"
+import type { NeteaseCandidate, NeteaseImportResult, NeteaseInfo, NeteaseTags } from "../../domain/netease"
 import { AppConfig } from "../../config"
 import { MusicFolderRepo } from "../../repo/music-folders"
 import { AgentSessionRepo } from "../../repo/agent-sessions"
@@ -11,6 +11,8 @@ import { Scanner } from "../scanner"
 import { lyricService } from "../lyrics"
 import { childDirectories, openDestination } from "../youtube/downloader"
 import { checkSubdirectory } from "../youtube/source"
+import { neteaseLibraryTags } from "./library-tags"
+import { neteaseRemovals } from "./removals"
 import { neteaseSource } from "./source"
 import {
   VIP_SKIP_REASON, albumDetail, mergeLyrics, neteaseRuntime, searchSongs, songDetails, songLyrics, vipFee,
@@ -27,12 +29,26 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
   folders(): Effect.Effect<Array<{ id: string; name: string; path: string; writable: boolean }>>
   children(folderId: string, subdirectory: string): Effect.Effect<{ directories: string[]; truncated: boolean }, Fail>
   start(owner: number, session: string, url: string, folderId: string, subdirectory: string): Effect.Effect<NeteaseImportResult, Fail>
+  /** 任意登录用户可读（对齐 youtubeInfo）；纯 DB 读，不触碰文件。 */
+  info(id: string): Effect.Effect<NeteaseInfo, Fail>
+  /** 仅导入者或管理员；其余 NotFound（不泄露存在性）。 */
+  edit(owner: number, id: string, tags: NeteaseTags): Effect.Effect<NeteaseInfo, Fail>
+  /** 移出曲库（不删文件）/ 物理删除票据，语义与 youtube 完全一致（共享内核）。 */
+  removals: ReturnType<typeof neteaseRemovals>
 }>()("openmusic/NeteaseImports") {
   static readonly layer = Layer.effect(NeteaseImports, Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient, scanner = yield* Scanner, appConfig = yield* AppConfig
     // Invalid NETEASE_* values fail loudly at startup instead of degrading silently.
     const runtime: NeteaseRuntime = neteaseRuntime(appConfig)
     const lyrics = lyricService(sql)
+    const metadata = neteaseLibraryTags(sql, scanner, runtime)
+    // Per-track mutex shared by edit and removals (same posture as YoutubeImports).
+    const mutating = new Set<string>()
+    const guarded = <A, E>(id: string, task: Effect.Effect<A, E>) => Effect.suspend(() => {
+      if (mutating.has(id)) return Effect.fail(bad("此版本正被修改，请稍后再试。")) as Effect.Effect<A, E | BadRequest>
+      mutating.add(id); return task.pipe(Effect.ensuring(Effect.sync(() => mutating.delete(id))))
+    })
+    const removals = neteaseRemovals(sql, guarded)
     // Scanner upsert and provenance commit together, like the YouTube import.
     const index = (folderId: number, rel: string, file: string, user: number, songId: string, quality: string) =>
       sql.withTransaction(Effect.gen(function* () {
@@ -60,6 +76,9 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
       url: `https://music.163.com/song?id=${brief.songId}`, vip: vipFee(brief.fee),
     })
     return NeteaseImports.of({
+      info: metadata.info,
+      edit: (user, id, tags) => guarded(id, metadata.edit(user, id, tags)),
+      removals,
       folders: () => MusicFolderRepo.list.pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie,
         Effect.flatMap(folders => Effect.forEach(folders, f => Effect.promise(async () => ({
           id: f.id, name: f.name, path: f.path,

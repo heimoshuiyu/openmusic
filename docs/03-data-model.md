@@ -239,6 +239,8 @@ MVP 之后的迁移各自带走了新的表/视图，设计动机见对应文档
 | 0012 | `lyric_documents` / `track_lyrics` | 歌词正文（digest 去重、不可变）+ 每曲目绑定（saved/file/none 三态） |
 | 0013 | `netease_imports` | 网易云导入溯源：song_id、导入者、实际音质档位（歌词复用 0012，docs/04） |
 
+`netease_imports` 是导入时的快照，**管理编辑不回写它**：`PATCH /imports/netease/tracks/:id/metadata` 的固定文本走 0011 覆盖值、封面内嵌进文件，管理员代编辑不挪 `imported_by`，`quality` 保持交付档位快照；无 `cover_source/upload_date` 列——发行日即专辑年份，落在文件标签与 `albums.year`，与 `youtube_imports` 的逐曲 upload_date 语义刻意不同。行缺失（legacy 文件）时仅管理员可管理，须先核验文件内 `OPENMUSIC_NETEASE_ID` 标签（docs/04 网易云导入组）。移出库/物理删除复用 0009 与共享删除内核（`service/import-removals.ts`，YouTube 同源）。
+
 ### 2.11 P2 预留
 
 - `tracks.embedding vector(768)`（pgvector，AI 搜索）
