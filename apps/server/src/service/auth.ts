@@ -92,7 +92,15 @@ export class Auth extends Context.Service<Auth, AuthApi>()("app/Auth") {
       const keyPath = `${config.dataDir}/secret.key`
       try {
         return keyFromHex((await fs.readFile(keyPath, "utf8")).trim())
-      } catch {
+      } catch (e) {
+        // 只有「文件不存在」才走首启生成；权限/IO 故障宁可启动失败——
+        // 静默换新 key 会让全部存量 Subsonic 凭据不可解密，且只表现为每个客户端 40，无从排查
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new Error(
+            `无法读取 ${keyPath}（${(e as NodeJS.ErrnoException).code}）：拒绝重建密钥。修复挂载/权限后重启；如确认放弃存量凭据，删除该文件再重启将重新生成`,
+            { cause: e },
+          )
+        }
         await fs.mkdir(config.dataDir, { recursive: true })
         const generated = randomToken(32)
         await fs.writeFile(keyPath, `${generated}\n`, { mode: 0o600 })
@@ -119,12 +127,15 @@ export class Auth extends Context.Service<Auth, AuthApi>()("app/Auth") {
       if (count > 0) return
       const username = yield* Config.withDefault(Config.String("OPENMUSIC_ADMIN_USER"), "admin")
       const envPassword = process.env.OPENMUSIC_ADMIN_PASSWORD
-      const password =
-        envPassword !== undefined && envPassword.length >= 6 ? envPassword : randomToken(6)
+      const passwordFromEnv = envPassword !== undefined && envPassword.length >= 6
+      const password = passwordFromEnv ? envPassword : randomToken(6)
       const hash = yield* hashPassword(password)
-      const secret = yield* encryptSecret(secretKey, md5Hex(password)) // seed=hex(md5(pw))，docs/03 §2.6
+      const secret = yield* encryptSecret(secretKey, md5Hex(password)) // seed=hex(md5(pw))，docs/03 §2.7
       yield* repo(UserRepo.create({ username, passwordHash: hash, secret, isAdmin: true }))
-      if (envPassword === undefined) {
+      if (envPassword !== undefined && !passwordFromEnv) {
+        yield* Effect.logWarning("OPENMUSIC_ADMIN_PASSWORD 少于 6 位，已忽略并改用随机密码（见下一条日志，仅打印一次）")
+      }
+      if (!passwordFromEnv) {
         yield* Effect.logWarning(
           `bootstrap admin created — username: ${username} password: ${password} (仅打印一次，请立即保存)`,
         )
