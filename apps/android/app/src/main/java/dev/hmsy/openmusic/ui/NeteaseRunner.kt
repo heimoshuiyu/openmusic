@@ -6,9 +6,8 @@ import androidx.compose.runtime.setValue
 import dev.hmsy.openmusic.OpenMusicApp
 import dev.hmsy.openmusic.data.NeteaseImportResult
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.net.SocketTimeoutException
 
 /**
  * MainArea 级网易云导入运行器。
@@ -17,11 +16,16 @@ import kotlinx.coroutines.withContext
  * 组合层：切 tab / 离开导入屏不打断等待，回到导入屏仍能看到进行中状态与结果。
  * 登出（sessionKey 重组 MainArea）时随 scope 一并作废——会话都没了，等待无意义。
  *
- * 「放弃等待 ≠ 服务端取消」：本类不提供取消（没有对应端点）；App 进程若被杀，
- * 服务器可能仍占着单飞槽位继续导入，此时重新提交会得到 422「已有导入正在执行，
- * 请稍后再试」，文案如实转述即可，不做假进度。
+ * 「放弃等待 ≠ 服务端取消」：本类不提供取消（没有对应端点）；客户端超时只意味着
+ * 我们不再等，服务器可能仍在导入并占着单飞槽位。此时重试同一链接与目标即可取回
+ * 终态（同目录同 songId 的既有文件按 skipped 幂等，不会重复下载）。
  */
-class NeteaseRunner(private val scope: CoroutineScope) {
+class NeteaseRunner(
+  private val scope: CoroutineScope,
+  /** 注入点：单测替换；默认直连共享会话的 OmApi（其内部自带 Dispatchers.IO） */
+  private val import: suspend (url: String, folderId: String, subdirectory: String?) -> NeteaseImportResult =
+    { url, folderId, subdirectory -> OpenMusicApp.api.neteaseImport(url, folderId, subdirectory) },
+) {
 
   /** 进行中的导入（null = 空闲）；target 为「目录/子目录」展示用摘要 */
   data class Busy(val url: String, val target: String, val startedAtMs: Long)
@@ -41,11 +45,20 @@ class NeteaseRunner(private val scope: CoroutineScope) {
     busy = Busy(url, target, System.currentTimeMillis())
     error = null
     scope.launch {
-      val result = withContext(Dispatchers.IO) { runCatching { OpenMusicApp.api.neteaseImport(url, folderId, subdirectory) } }
-      busy = null
-      result.fold(
-        onSuccess = { outcome = it },
-        onFailure = { error = it.message ?: "导入失败：网络或服务器错误。" },
+      runCatching { import(url, folderId, subdirectory) }.fold(
+        onSuccess = {
+          busy = null
+          outcome = it
+        },
+        onFailure = { e ->
+          busy = null
+          error = when (e) {
+            is SocketTimeoutException ->
+              "等待服务器结果超时：导入可能仍在服务器进行（放弃等待不会取消它）。" +
+                "稍后用相同链接与目录重新提交即可取回结果——已下载的文件会标记为跳过，不会重复下载。"
+            else -> e.message ?: "导入失败：网络或服务器错误。"
+          }
+        },
       )
     }
     return null

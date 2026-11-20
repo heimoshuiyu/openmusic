@@ -109,10 +109,17 @@ fun neteaseStateLabel(state: String): String = when (state) {
 fun neteaseCountSummary(r: NeteaseImportResult): String =
   "共 ${r.total} · 导入 ${r.imported} · 跳过 ${r.skipped} · 失败 ${r.failed}"
 
-/** 封面来源白名单（服务端语义）：netease 恢复原封面，或 https 的 *.music.126.net 图片。 */
+/** 封面来源白名单（服务端语义）：netease 恢复原封面；URL 仅接受 https 的 *.music.126.net
+ *  图片路径——无 query、无 hash、扩展名 .jpg/.jpeg/.png/.webp。data:image 是服务端能力，客户端暂不提供入口。 */
 fun neteaseCoverUrlOk(url: String): Boolean {
   val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
-  return uri.scheme == "https" && (uri.host ?: "").lowercase().endsWith(".music.126.net")
+  if (uri.scheme != "https") return false
+  val host = (uri.host ?: "").lowercase()
+  if (!host.endsWith(".music.126.net")) return false
+  if (!uri.rawQuery.isNullOrEmpty()) return false
+  if (!uri.rawFragment.isNullOrEmpty()) return false
+  val path = (uri.rawPath ?: "").lowercase()
+  return path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".png") || path.endsWith(".webp")
 }
 
 /** 文本标签校验（镜像服务端 metadataFields）：非空、≤300、含非空白字符、无控制字符 */
@@ -125,6 +132,70 @@ fun neteaseLabelOk(value: String): Boolean =
 fun neteasePositionTextOk(text: String): Boolean {
   if (text.isBlank()) return true
   return text.trim().toIntOrNull()?.let { it in 1..9999 } == true
+}
+
+// ── 元数据 PATCH 载荷计算（纯函数，表单与服务端语义的唯一裁决点）────────
+
+/** PATCH 载荷：字段 null = 保持不变（不发送）。unsupportedClears = 用户想清空、
+ *  但服务端 NonEmptyString 不可能接受的变更字段（本地语义：暂不支持清除已设值）。 */
+data class NeteaseTagsPatch(
+  val title: String? = null,
+  val artist: String? = null,
+  val album: String? = null,
+  val albumArtist: String? = null,
+  val genre: String? = null,
+  val trackNumber: Int? = null,
+  val discNumber: Int? = null,
+  val cover: String? = null,
+  val unsupportedClears: List<String> = emptyList(),
+) {
+  /** 是否存在任何可提交的变更（清除企图不算可提交） */
+  val isDirty: Boolean get() = title != null || artist != null || album != null || albumArtist != null ||
+    genre != null || trackNumber != null || discNumber != null || cover != null
+}
+
+/**
+ * 由「服务端当前值 + 表单值」计算 PATCH 载荷：
+ * - 值未变 → 省略；
+ * - 变更为空串/纯空白 → 不提交并记入 unsupportedClears（直接提交会被 422 拒绝；
+ *   UI 以「暂不支持清除已设值（留空 = 保持不变）」如实说明）；
+ * - 位置字段按 Int 归一（"03" == 3 == 旧值 3 → 不变）；留空或非法文本按不变处理（调用方负责禁用非法输入）。
+ */
+fun neteaseTagsPatch(
+  info: NeteaseInfo,
+  title: String,
+  artist: String,
+  album: String,
+  albumArtist: String,
+  genre: String,
+  trackText: String,
+  discText: String,
+  cover: String? = null,
+): NeteaseTagsPatch {
+  val clears = mutableListOf<String>()
+
+  fun text(old: String?, next: String, label: String): String? = when {
+    next == old.orEmpty() -> null
+    next.isBlank() -> { clears.add(label); null }
+    else -> next
+  }
+
+  fun position(old: Int?, next: String): Int? {
+    val parsed = next.trim().toIntOrNull() ?: return null
+    return parsed.takeIf { it != old }
+  }
+
+  return NeteaseTagsPatch(
+    title = text(info.title, title, "曲名"),
+    artist = text(info.artist, artist, "歌手"),
+    album = text(info.album, album, "专辑"),
+    albumArtist = text(info.albumArtist, albumArtist, "专辑作者"),
+    genre = text(info.genre, genre, "流派"),
+    trackNumber = position(info.trackNumber, trackText),
+    discNumber = position(info.discNumber, discText),
+    cover = cover,
+    unsupportedClears = clears.toList(),
+  )
 }
 
 fun formatSizeBytes(bytes: Long): String {

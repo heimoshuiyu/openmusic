@@ -36,6 +36,12 @@ internal fun buildApiRequest(method: String, url: HttpUrl, body: String? = null)
   return Request.Builder().url(url).method(method, requestBody).build()
 }
 
+/** 查询参数编码：空格/加号歧义统一走 %20（URLSearchParams 与字面解码两种解析器下都正确）。 */
+internal fun encodeParam(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+/** 路径段编码（id / 票据 key）：输入域只有 ASCII id，无空格歧义。 */
+internal fun encodePath(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+
 /** 会话 cookie（om_session）持久化 CookieJar：内存缓存 + DataStore 落盘 */
 class PersistentCookieJar(private val store: SettingsStore) : CookieJar {
 
@@ -244,11 +250,6 @@ class OmApi(
 
   /** 服务端同步等终态（多曲分钟级）：只放宽读超时；连接池与 cookie 随共享 builder 继承。 */
   private val longClient by lazy { client.newBuilder().readTimeout(10, TimeUnit.MINUTES).build() }
-
-  /** 空格/加号编码歧义统一走 %20（URLSearchParams 与字面解码两种解析器下都正确） */
-  private fun encodeParam(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-
-  private fun encodePath(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
 
   suspend fun neteaseSearch(q: String): List<NeteaseCandidate> =
     request("GET", "/api/v1/imports/netease/search?q=${encodeParam(q)}")

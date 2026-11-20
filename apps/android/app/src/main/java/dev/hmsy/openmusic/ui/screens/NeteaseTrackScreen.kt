@@ -50,6 +50,7 @@ import dev.hmsy.openmusic.data.formatSizeBytes
 import dev.hmsy.openmusic.data.neteaseCoverUrlOk
 import dev.hmsy.openmusic.data.neteaseLabelOk
 import dev.hmsy.openmusic.data.neteasePositionTextOk
+import dev.hmsy.openmusic.data.neteaseTagsPatch
 import dev.hmsy.openmusic.ui.icons.OmIcons
 import dev.hmsy.openmusic.ui.components.DetailTopBar
 import dev.hmsy.openmusic.ui.components.ErrorView
@@ -189,15 +190,26 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
   var coverMode by remember(info) { mutableStateOf(0) } // 0=保持 1=恢复网易云封面 2=图片 URL
   var coverUrl by remember { mutableStateOf("") }
 
-  val textsOk = listOf(title, artist, album).all(::neteaseLabelOk) &&
-    (albumArtist.isEmpty() || neteaseLabelOk(albumArtist)) &&
-    (genre.isEmpty() || neteaseLabelOk(genre))
+  // 必填文本（曲名/歌手/专辑）非空校验；可选字段清空由 patch 的 unsupportedClears 兜底
+  val textsOk = listOf(title, artist, album).all(::neteaseLabelOk)
   val positionsOk = neteasePositionTextOk(trackText) && neteasePositionTextOk(discText)
   val coverOk = coverMode != 2 || neteaseCoverUrlOk(coverUrl.trim())
-  val dirty = title != info.title || artist != info.artist || album != info.album ||
-    albumArtist != info.albumArtist.orEmpty() || genre != info.genre.orEmpty() ||
-    trackText != info.trackNumber?.toString().orEmpty() || discText != info.discNumber?.toString().orEmpty() ||
-    coverMode != 0
+  // 载荷 = 唯一裁决点：变更才提交；清除已设值不会发出空串（服务端 NonEmptyString 拒绝）
+  val patch = neteaseTagsPatch(
+    info = info,
+    title = title,
+    artist = artist,
+    album = album,
+    albumArtist = albumArtist,
+    genre = genre,
+    trackText = trackText,
+    discText = discText,
+    cover = when (coverMode) {
+      1 -> "netease"
+      2 -> coverUrl.trim().takeIf(::neteaseCoverUrlOk)
+      else -> null
+    },
+  )
 
   SectionLabel("元数据")
   TagField("曲名", title, { title = it }, single = true)
@@ -222,13 +234,13 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
 
   SectionLabel("封面")
   CoverModeRow(0, coverMode, "保持当前封面", if (info.hasCover) "文件已有内嵌封面" else "当前无内嵌封面") { coverMode = 0 }
-  CoverModeRow(1, coverMode, "恢复网易云封面", "重新内嵌导入时的网易云封面") { coverMode = 1 }
-  CoverModeRow(2, coverMode, "指定图片 URL", "仅接受 https 的 *.music.126.net 图片") { coverMode = 2 }
+  CoverModeRow(1, coverMode, "恢复网易云封面", "重新内嵌导入时的网易云封面（暂不支持从本地相册选图）") { coverMode = 1 }
+  CoverModeRow(2, coverMode, "指定图片 URL", "https 的 *.music.126.net 图片，无参数/锚点，.jpg/.jpeg/.png/.webp") { coverMode = 2 }
   if (coverMode == 2) {
     OutlinedTextField(
       value = coverUrl,
       onValueChange = { coverUrl = it },
-      placeholder = { Text("https://p1.music.126.net/…", style = OmType.Body, color = Om.Faint) },
+      placeholder = { Text("https://p1.music.126.net/….jpg", style = OmType.Body, color = Om.Faint) },
       singleLine = true,
       isError = coverUrl.isNotBlank() && !neteaseCoverUrlOk(coverUrl.trim()),
       modifier = Modifier
@@ -236,11 +248,21 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
         .padding(horizontal = 20.dp, vertical = 4.dp),
     )
     if (coverUrl.isNotBlank() && !neteaseCoverUrlOk(coverUrl.trim())) {
-      Text("封面 URL 必须是 https 且主机名以 .music.126.net 结尾。", style = OmType.Meta, color = Om.Danger, modifier = Modifier.padding(horizontal = 20.dp))
+      Text(
+        "封面 URL 须为 https、主机名以 .music.126.net 结尾、无参数/锚点，且以 .jpg/.jpeg/.png/.webp 结尾。",
+        style = OmType.Meta, color = Om.Danger, modifier = Modifier.padding(horizontal = 20.dp),
+      )
     }
   }
 
   saveError?.let { Text(it, style = OmType.Meta, color = Om.Danger, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+  if (patch.unsupportedClears.isNotEmpty()) {
+    Text(
+      "暂不支持清除已设值：${patch.unsupportedClears.joinToString("、")}。留空 = 保持不变；请恢复原值或填入新值。",
+      style = OmType.Meta, color = Om.Danger,
+      modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+  }
   Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
     Button(
       onClick = {
@@ -252,18 +274,14 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
             runCatching {
               OpenMusicApp.api.neteaseEditTags(
                 trackId = info.trackId,
-                title = title.takeIf { it != info.title },
-                artist = artist.takeIf { it != info.artist },
-                album = album.takeIf { it != info.album },
-                albumArtist = albumArtist.takeIf { it != info.albumArtist.orEmpty() },
-                genre = genre.takeIf { it != info.genre.orEmpty() },
-                trackNumber = trackText.trim().toIntOrNull()?.takeIf { it != info.trackNumber },
-                discNumber = discText.trim().toIntOrNull()?.takeIf { it != info.discNumber },
-                cover = when (coverMode) {
-                  1 -> "netease"
-                  2 -> coverUrl.trim().takeIf(::neteaseCoverUrlOk)
-                  else -> null
-                },
+                title = patch.title,
+                artist = patch.artist,
+                album = patch.album,
+                albumArtist = patch.albumArtist,
+                genre = patch.genre,
+                trackNumber = patch.trackNumber,
+                discNumber = patch.discNumber,
+                cover = patch.cover,
               )
             }
           }
@@ -279,7 +297,7 @@ private fun NeteaseTagsSection(info: NeteaseInfo, onSaved: (NeteaseInfo) -> Unit
           )
         }
       },
-      enabled = dirty && textsOk && positionsOk && coverOk && !saving,
+      enabled = patch.isDirty && patch.unsupportedClears.isEmpty() && textsOk && positionsOk && coverOk && !saving,
       colors = ButtonDefaults.buttonColors(containerColor = Om.Paper, contentColor = Om.Shell),
       shape = RoundedCornerShape(2.dp),
     ) { Text(if (saving) "保存中…" else "保存元数据", style = OmType.Row) }
@@ -354,7 +372,20 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
   var review by remember { mutableStateOf<NeteaseDeletionReview?>(null) }
   var flowError by remember { mutableStateOf<String?>(null) }
 
-  fun runFlow(name: String, action: suspend () -> Unit, onDone: () -> Unit) {
+  /** 票据失效（过期/不存在/已被消费）→ 本地状态一并作废，恢复「申请删除原文件」入口 */
+  fun ticketInvalid(message: String) {
+    ticket = null
+    review = null
+    flowError = message
+  }
+
+  /** onFail 返回 true = 已按票据失效处理（404/400 视为票据不存在或已消费） */
+  fun runFlow(
+    name: String,
+    action: suspend () -> Unit,
+    onDone: () -> Unit,
+    onFail: ((Throwable) -> Boolean)? = null,
+  ) {
     if (busy != null) return
     busy = name
     flowError = null
@@ -363,9 +394,17 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
       busy = null
       outcome.fold(
         onSuccess = { onDone() },
-        onFailure = { e -> flowError = "操作失败：${e.message ?: e.toString()}" },
+        onFailure = { e ->
+          if (onFail?.invoke(e) != true) flowError = "操作失败：${e.message ?: e.toString()}"
+        },
       )
     }
+  }
+
+  /** 删除流里的 404/400：票据过期、不存在或已被消费——不要只把「404」抛给用户 */
+  fun ticketMiss(e: Throwable): Boolean {
+    val status = (e as? ApiError)?.status
+    return status == 400 || status == 404
   }
 
   SectionLabel("危险区")
@@ -401,6 +440,8 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
 
   ticket?.let { t ->
     SectionLabel("删除申请（待人工核对）")
+    // 本地过期判定：过期票据禁用核对入口，只能取消后重新申请
+    val expired = t.expiresAt > 0 && t.expiresAt <= System.currentTimeMillis()
     Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
       Text(
         "申请已创建。核对票据只在本机内存中继续，也可稍后在 Web 端核对页处理：",
@@ -409,19 +450,38 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
       Text("票据 ${t.requestId}", style = OmType.Readout, color = Om.Dim)
       Text("Web 核对路径 ${t.reviewPath}", style = OmType.Readout, color = Om.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
       NeteaseExpiryText(t.expiresAt)
+      if (expired) {
+        Text("票据已过期——请「取消申请」后重新发起。", style = OmType.Meta, color = Om.Danger, modifier = Modifier.padding(top = 4.dp))
+      }
       Spacer(Modifier.height(6.dp))
       Row {
         Button(
-          onClick = { runFlow("review", { review = OpenMusicApp.api.neteaseReviewDeletion(t.requestId) }, {}) },
-          enabled = busy == null,
+          onClick = { runFlow("review", { review = OpenMusicApp.api.neteaseReviewDeletion(t.requestId) }, {}) { e ->
+            if (ticketMiss(e)) {
+              ticketInvalid("删除票据已过期或不存在——请重新申请删除。")
+              true
+            } else false
+          } },
+          enabled = busy == null && !expired,
           colors = ButtonDefaults.buttonColors(containerColor = Om.Paper, contentColor = Om.Shell),
           shape = RoundedCornerShape(2.dp),
         ) { Text(if (busy == "review") "读取中…" else "打开人工核对", style = OmType.Row) }
         Spacer(Modifier.width(10.dp))
         TextButton(
-          onClick = { runFlow("cancel", { OpenMusicApp.api.neteaseCancelDeletion(t.requestId) }) { ticket = null; review = null } },
+          onClick = {
+            runFlow(
+              "cancel",
+              { OpenMusicApp.api.neteaseCancelDeletion(t.requestId) },
+              { ticket = null; review = null },
+            ) { e ->
+              if (ticketMiss(e)) {
+                ticketInvalid("票据已不存在（可能已过期或已被使用）——流程已重置，可重新申请。")
+                true
+              } else false
+            }
+          },
           enabled = busy == null,
-        ) { Text("取消申请", color = Om.Faint) }
+        ) { Text(if (expired) "取消过期票据" else "取消申请", color = Om.Faint) }
       }
     }
   }
@@ -436,10 +496,18 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
         Toast.makeText(context, "删除已兑现：磁盘文件已移除。", Toast.LENGTH_LONG).show()
         onRemoved()
       },
+      // confirm 失败且票据已失效（400/404）：清票恢复重新申请入口，附可操作文案
+      onTicketConsumed = { message -> ticketInvalid(message) },
       onCancelTicket = {
-        runFlow("cancel", { OpenMusicApp.api.neteaseCancelDeletion(ticket?.requestId ?: "") }) {
-          ticket = null
-          review = null
+        runFlow(
+          "cancel",
+          { OpenMusicApp.api.neteaseCancelDeletion(ticket?.requestId ?: "") },
+          { ticket = null; review = null },
+        ) { e ->
+          if (ticketMiss(e)) {
+            ticketInvalid("票据已不存在（可能已过期或已被使用）——流程已重置，可重新申请。")
+            true
+          } else false
         }
       },
       onDismiss = { review = null },
@@ -465,10 +533,14 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
         TextButton(
           onClick = {
             showUnindex = false
-            runFlow("unindex", { OpenMusicApp.api.neteaseUnindex(info.trackId) }) {
-              Toast.makeText(context, "已移出曲库；文件保留。", Toast.LENGTH_SHORT).show()
-              onRemoved()
-            }
+            runFlow(
+              "unindex",
+              { OpenMusicApp.api.neteaseUnindex(info.trackId) },
+              {
+                Toast.makeText(context, "已移出曲库；文件保留。", Toast.LENGTH_SHORT).show()
+                onRemoved()
+              },
+            )
           },
         ) { Text("确认移出", color = Om.Danger) }
       },
@@ -480,6 +552,12 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
 /**
  * 人工核对面板：展示曲目/路径/大小/过期时间；必须逐字输入完整 filename（与展示值完全一致）
  * 才允许确认；确认同时携带 review 发放的 token。绝不提供一键删除。
+ *
+ * confirm 失败的两种处理：
+ * - 400/404（服务端在校验通过后即消费票据，物理删除失败也要求重新申请）→ 通知父级
+ *   清空 ticket/review，恢复重新申请入口；
+ * - 其他错误（网络超时等，无法确认票据是否已被消费）→ 保留票据重试，文案指明
+ *   「取消删除申请后重新申请」的显式出路，不盲清票导致状态不一致。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -487,6 +565,7 @@ private fun DeletionReviewSheet(
   review: NeteaseDeletionReview,
   key: String,
   onConfirmed: () -> Unit,
+  onTicketConsumed: (String) -> Unit,
   onCancelTicket: () -> Unit,
   onDismiss: () -> Unit,
 ) {
@@ -495,6 +574,8 @@ private fun DeletionReviewSheet(
   var error by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
   val matches = typed == review.filename
+  // 本地过期判定：过期票据禁用确认，只能返回重新申请
+  val expired = review.expiresAt > 0 && review.expiresAt <= System.currentTimeMillis()
 
   ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Om.Panel) {
     Column(
@@ -522,6 +603,13 @@ private fun DeletionReviewSheet(
       InfoRow("大小", formatSizeBytes(review.sizeBytes))
       InfoRow("路径", review.path, mono = true)
       NeteaseExpiryText(review.expiresAt, Modifier.padding(horizontal = 20.dp, vertical = 5.dp))
+      if (expired) {
+        Text(
+          "核对票据已过期——无法继续确认；请返回「取消删除申请」后重新申请。",
+          style = OmType.Meta, color = Om.Danger,
+          modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+      }
       Spacer(Modifier.height(10.dp))
       Text(
         "防误删确认：请逐字输入上方完整文件名（${review.filename}）。",
@@ -545,7 +633,7 @@ private fun DeletionReviewSheet(
       Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
         Button(
           onClick = {
-            if (busy || !matches) return@Button
+            if (busy || !matches || expired) return@Button
             busy = true
             error = null
             scope.launch {
@@ -553,10 +641,25 @@ private fun DeletionReviewSheet(
                 runCatching { OpenMusicApp.api.neteaseConfirmDeletion(key, review.token, typed) }
               }
               busy = false
-              outcome.fold(onSuccess = { onConfirmed() }, onFailure = { e -> error = "删除失败：${e.message ?: e.toString()}" })
+              outcome.fold(
+                onSuccess = { onConfirmed() },
+                onFailure = { e ->
+                  val status = (e as? ApiError)?.status
+                  if (status == 400 || status == 404) {
+                    // 票据已被消费或已失效：服务端校验通过即消费票据，物理删除失败需重新申请
+                    onTicketConsumed(
+                      "删除未完成：核对票据已被消费或已失效（服务端校验通过后即消费票据）。请重新申请删除后再试。",
+                    )
+                  } else {
+                    // 无法确认票据是否已被消费：不清票，保留重试与显式重置出路
+                    error =
+                      "删除未完成：${e.message ?: e.toString()}。可再试一次；若持续失败，请「取消删除申请」后重新申请（旧票据随之作废）。"
+                  }
+                },
+              )
             }
           },
-          enabled = matches && !busy,
+          enabled = matches && !busy && !expired,
           colors = ButtonDefaults.buttonColors(containerColor = Om.Danger, contentColor = Color.White),
           shape = RoundedCornerShape(2.dp),
         ) { Text(if (busy) "删除中…" else "确认删除文件", style = OmType.Row) }
