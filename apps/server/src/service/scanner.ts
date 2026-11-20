@@ -747,7 +747,12 @@ export class Scanner extends Context.Service<Scanner, {
         const folder = folders.find((f) => f.id === row.folder_id)
         if (folder === undefined) continue
         const dirAbs = dirRel === "" ? folder.path : `${folder.path}/${dirRel}`
-        const candidates = [...COVER_CANDIDATES, `${row.album_key}.jpg`, `${row.album_key}.png`]
+        // album_key 派生自专辑名（仅去空白），可能携带 / 或 ..——此类键不进候选，
+        // 否则 exists() 会越出专辑目录探测、cover_file 原样回发即越界读取
+        const keyCandidates = /[\\/]/.test(row.album_key)
+          ? []
+          : [`${row.album_key}.jpg`, `${row.album_key}.png`]
+        const candidates = [...COVER_CANDIDATES, ...keyCandidates]
         const found: string | null = yield* Effect.promise(async () => {
           for (const candidate of candidates) {
             if (await exists(`${dirAbs}/${candidate}`)) {

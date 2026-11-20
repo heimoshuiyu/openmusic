@@ -414,6 +414,8 @@ export class Stream extends Context.Service<Stream, StreamApi>()("app/Stream") {
         // 1) 专辑文件夹封面（按扩展名给 mime——写死 jpeg 会把 PNG 谎报成 JPEG）
         for (const row of rows) {
           if (row.cover_file === null) continue
+          // cover_file 只应是 folder 根下的相对路径；绝对路径或带 .. 段的行直接跳过（防越界读取）
+          if (row.cover_file.startsWith("/") || row.cover_file.split("/").includes("..")) continue
           const stat = yield* statOf(`${row.folder_path}/${row.cover_file}`)
           if (Exit.isSuccess(stat)) {
             const ext = row.cover_file.split(".").pop()?.toLowerCase()

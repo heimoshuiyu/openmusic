@@ -212,14 +212,14 @@ export class PlaylistsGroup extends HttpApiGroup.make("playlists")
       params: IdPath,
       payload: AddPlaylistTracksRequest,
       success: HttpApiSchema.NoContent,
-      error: [NotFound],
+      error: [NotFound, Forbidden],
     }),
   )
   .add(
     del("removeTrack", "/playlists/:id/tracks/:position", {
       params: { id: Schema.String, position: Schema.NumberFromString },
       success: HttpApiSchema.NoContent,
-      error: [NotFound],
+      error: [NotFound, Forbidden],
     }),
   )
   .add(
@@ -227,7 +227,7 @@ export class PlaylistsGroup extends HttpApiGroup.make("playlists")
       params: IdPath,
       payload: ReorderPlaylistRequest,
       success: HttpApiSchema.NoContent,
-      error: [NotFound, BadRequest],
+      error: [NotFound, BadRequest, Forbidden],
     }),
   )
   .middleware(SessionAuth).middleware(SqlProvider)

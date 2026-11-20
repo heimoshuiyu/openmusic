@@ -419,11 +419,13 @@ export const SubsonicRoutesLive = HttpRouter.use((router) =>
         if (playlistId !== undefined) {
           return Effect.flatMap(
             PlaylistRepo.visible(playlistId, userId),
-            () =>
-              Effect.flatMap(
-                PlaylistRepo.replaceTracks(playlistId, songIds),
-                () => handlers["getPlaylist"]!(userId, false, params),
-              ),
+            (playlist) =>
+              playlist.ownerUserId !== userId
+                ? subsonicResponse(envelope.error(SUBSONIC_ERRORS.notAuthorized, "not the playlist owner"), "json")
+                : Effect.flatMap(
+                  PlaylistRepo.replaceTracks(playlistId, songIds),
+                  () => handlers["getPlaylist"]!(userId, false, params),
+                ),
           )
         }
         if (name === undefined) return missingParam()
@@ -447,19 +449,21 @@ export const SubsonicRoutesLive = HttpRouter.use((router) =>
         const songIndexToRemove = many(params, "songIndexToRemove").map(Number)
         return Effect.flatMap(
           PlaylistRepo.visible(playlistId, userId),
-          () =>
-            Effect.flatMap(
-              PlaylistRepo.updateMeta(playlistId, {
-                name: name ?? undefined,
-                comment: comment ?? null,
-                isPublic: isPublic === undefined ? undefined : isPublic === "true",
-              }),
-              () =>
-                Effect.flatMap(
-                  PlaylistRepo.editTracks(playlistId, songIdToAdd, songIndexToRemove),
-                  () => ok(),
-                ),
-            ),
+          (playlist) =>
+            playlist.ownerUserId !== userId
+              ? subsonicResponse(envelope.error(SUBSONIC_ERRORS.notAuthorized, "not the playlist owner"), "json")
+              : Effect.flatMap(
+                PlaylistRepo.updateMeta(playlistId, {
+                  name: name ?? undefined,
+                  comment: comment ?? null,
+                  isPublic: isPublic === undefined ? undefined : isPublic === "true",
+                }),
+                () =>
+                  Effect.flatMap(
+                    PlaylistRepo.editTracks(playlistId, songIdToAdd, songIndexToRemove),
+                    () => ok(),
+                  ),
+              ),
         )
       },
 
@@ -468,7 +472,10 @@ export const SubsonicRoutesLive = HttpRouter.use((router) =>
         if (playlistId === undefined) return missingParam()
         return Effect.flatMap(
           PlaylistRepo.visible(playlistId, userId),
-          () => Effect.flatMap(PlaylistRepo.delete(playlistId), () => ok()),
+          (playlist) =>
+            playlist.ownerUserId !== userId
+              ? subsonicResponse(envelope.error(SUBSONIC_ERRORS.notAuthorized, "not the playlist owner"), "json")
+              : Effect.flatMap(PlaylistRepo.delete(playlistId), () => ok()),
         )
       },
 

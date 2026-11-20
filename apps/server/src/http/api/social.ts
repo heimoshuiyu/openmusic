@@ -295,24 +295,32 @@ export const PlaylistsApiLive = HttpApiBuilder.group(Api, "playlists", Effect.fn
       Effect.flatMap(CurrentUser, (user) =>
         Effect.flatMap(
           visible(params.id, Number(user.id)),
-          () =>
-            infra(PlaylistRepo.editTracks(
-              Number(params.id),
-              payload.trackIds.map(Number),
-              [],
-            )),
+          (playlist) =>
+            playlist.ownerUserId !== Number(user.id)
+              ? Effect.fail(new Forbidden({ message: "not owner" }))
+              : infra(PlaylistRepo.editTracks(
+                Number(params.id),
+                payload.trackIds.map(Number),
+                [],
+              )),
         )),
     removeTrack: ({ params }) =>
       Effect.flatMap(CurrentUser, (user) =>
         Effect.flatMap(
           visible(params.id, Number(user.id)),
-          () => infra(PlaylistRepo.editTracks(Number(params.id), [], [params.position])),
+          (playlist) =>
+            playlist.ownerUserId !== Number(user.id)
+              ? Effect.fail(new Forbidden({ message: "not owner" }))
+              : infra(PlaylistRepo.editTracks(Number(params.id), [], [params.position])),
         )),
     reorder: ({ params, payload }) =>
       Effect.flatMap(CurrentUser, (user) =>
         Effect.flatMap(
           visible(params.id, Number(user.id)),
-          () => infra(PlaylistRepo.replaceTracks(Number(params.id), payload.order.map(Number))),
+          (playlist) =>
+            playlist.ownerUserId !== Number(user.id)
+              ? Effect.fail(new Forbidden({ message: "not owner" }))
+              : infra(PlaylistRepo.replaceTracks(Number(params.id), payload.order.map(Number))),
         )),
   })
 }))
