@@ -13,6 +13,7 @@ import { PlayRepo } from "../../repo/annotations"
 import { AgentSession, AgentService, AgentUnavailable, type AgentMessage } from "./agent-service"
 import { makeEventBridge } from "./event-bridge"
 import { makeProviderAdmin, waitForEntry } from "./provider-admin"
+import { migrateSeededSkill } from "./skill-seed"
 import { transcriber } from "./voice"
 import { answeredQuestion, questionService } from './questions'
 import { YoutubeImports } from "../youtube/imports"
@@ -177,12 +178,15 @@ const seedSkill = (agentHome: string) =>
       } catch {
         await fs.writeFile(skillPath, EXPLORATION_SKILL, "utf8")
       }
-      // Netease import skill: seeded like youtube-metadata, never overwrites a tuned copy.
+      // Netease import skill: seeded like youtube-metadata. On an exact official stale seed
+      // (d6b8e2d dual-backend copy / 9039856 anonymous-v1 copy) migrate to the bundled text;
+      // any other existing copy is a hand-tuned skill and stays byte-identical (EEXIST is
+      // swallowed in both cases, exactly like the pre-migration behavior).
       const neteaseSkill = path.join(agentHome, "skills/netease-import/SKILL.md")
       await fs.mkdir(path.dirname(neteaseSkill), { recursive: true })
       const bundledNetease = path.join(import.meta.dir, "skills/netease-import/SKILL.md")
       await fs.copyFile(bundledNetease, neteaseSkill, fs.constants.COPYFILE_EXCL)
-        .catch(async (e: NodeJS.ErrnoException) => { if (e.code !== "EEXIST") throw e })
+        .catch(async (e: NodeJS.ErrnoException) => { if (e.code === "EEXIST") await migrateSeededSkill(neteaseSkill, bundledNetease) })
     },
     catch: hostError("探索技能 seed 失败（不影响宿主启动）"),
   })
