@@ -225,7 +225,7 @@ Subsonic token = `md5(password + salt)`。argon2 哈希无法验证该式，故 
 - **不做**：cue 内嵌 REPLAYGAIN/ISRC、混合模式（同专辑虚拟+物理混排）——
   单镜像要么整虚拟要么整物理
 
-### 2.10 后续迁移新增的表（0007–0012）
+### 2.10 后续迁移新增的表（0007–0013）
 
 MVP 之后的迁移各自带走了新的表/视图，设计动机见对应文档：
 
@@ -237,6 +237,7 @@ MVP 之后的迁移各自带走了新的表/视图，设计动机见对应文档
 | 0010 | `library_albums`（视图） | 专辑身份与可见性分离：只有存在真实曲目引用的专辑可浏览（含 CUE 行） |
 | 0011 | `track_metadata_overrides` | 显式导入元数据：独立于文件标签、按物理版本持久化（docs/04） |
 | 0012 | `lyric_documents` / `track_lyrics` | 歌词正文（digest 去重、不可变）+ 每曲目绑定（saved/file/none 三态） |
+| 0013 | `netease_imports` | 网易云导入溯源：song_id、导入者、实际音质档位（歌词复用 0012，docs/04） |
 
 ### 2.11 P2 预留
 

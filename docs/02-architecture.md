@@ -49,6 +49,7 @@ openmusic/
 │   │       │   ├── stream.ts     # 流/转码/封面回发
 │   │       │   ├── lyrics.ts / lyrics-mcp.ts   # 歌词 sidecar+内嵌读取、agent 歌词工具
 │   │       │   ├── youtube/      # 导入：downloader/metadata/captions/removals/mcp
+│   │       │   ├── netease/     # 网易云导入：source/api/metadata/downloader/imports/mcp
 │   │       │   └── agent/         # 内嵌 AI 助手：tools/agent-service/embedded/voice
 │   │       ├── http/
 │   │       │   ├── api/           # /api/v1 HttpApi：group + handler + schema
@@ -109,6 +110,7 @@ Service 层只承载**需要编排的领域**；简单 CRUD 由 `/api/v1` handle
 | `stream.ts` | 直传 / 转码 / 封面字节流；Range 请求；转码缓存 LRU | 见 6 |
 | `lyrics.ts` / `lyrics-mcp.ts` | 歌词 sidecar 与内嵌标签读取、绑定/编辑；agent 歌词工具 | docs/04 歌词组 |
 | `youtube/` | yt-dlp 下载、标签写入、字幕导入、物理删除票据 | docs/04 导入组 |
+| `netease/` | 网易云导入：URL 白名单解析、明文 API/自建实例客户端、双下载驱动、时长校验、歌词入库 | docs/04 网易云导入组 |
 | `agent/` | 内嵌 AI 助手宿主、music 工具面、SSE/听写 | docs/08 |
 
 ### 3.4 错误模型
@@ -306,7 +308,10 @@ cacheKey = sha256(trackId + format + maxBitRate + 音频指纹参数)
 | `TRANSCODE_MAX_CONCURRENCY` | `4` | 并发转码上限 |
 | `LOG_LEVEL` | `info` | |
 | `SERVER_IDLE_TIMEOUT` | `0`（禁用） | Bun.serve 空闲连接超时秒数；默认禁用——流式播放依赖长连接（docs/07 §7 冻住坑） |
-| `OPENMUSIC_TAG_PYTHON` | `python3` | YouTube 导入写标签的解释器（需可 import mutagen；容器内已指向 yt-dlp venv，裸机开发需自备） |
+| `OPENMUSIC_TAG_PYTHON` | `python3` | YouTube/网易云导入写标签的解释器（需可 import mutagen；容器内已指向 yt-dlp venv，裸机开发需自备） |
+| `NETEASE_API_BASE` | 空（匿名 yt-dlp） | 网易云导入的自建 NeteaseCloudMusicApi 兼容实例基址（如 `http://ncm-api:3000`）；配置后走实例模式（VIP/无损，cookie 在用户实例侧） |
+| `NETEASE_QUALITY` | `exhigh` | 实例模式请求的音质档位：`standard/higher/exhigh/lossless/hires/jyeffect/jymaster/sky` |
+| `NETEASE_REAL_IP` | 空 | 可选：对网易云请求伪装的出口 IPv4（明文 API `X-Real-IP` 头 / 实例 `realIP` 查询参数 / yt-dlp `--xff`） |
 | `OPENMUSIC_ADMIN_USER` / `OPENMUSIC_ADMIN_PASSWORD` | — | 首次启动且无用户时创建管理员；密码缺省则生成随机密码并打印一次 |
 | `MUSIC_FOLDERS` | — | 首启种子（逗号分隔绝对路径）；music_folder 表为主，此后以 API 管理为准 |
 | `OPENMUSIC_SECRET` | — | Subsonic 凭据加密密钥（≥16 字符）；缺省首启生成 `DATA_DIR/secret.key`（后果见 docs/07 §3） |
@@ -329,6 +334,11 @@ bun run --filter @openmusic/web dev      # :5175，proxy /api /rest → :3000
 - app 容器依赖 db 健康检查（`pg_isready`），启动时自动跑迁移
 - 挂载：音乐目录（只读）、DATA_DIR、TRANSCODE_CACHE_DIR
 - 反向代理/HTTPS：交给外部（Caddy/nginx/路由器），应用自身不管 TLS
+- **可选 ncm-api 服务（网易云导入实例模式）**：默认部署不启动；`podman compose --profile netease up -d`
+  起 `moefurina/ncm-api:4.41.1`（兼容 NeteaseCloudMusicApi 4.x 协议，tag 不存在时用 latest），
+  然后在 `.env` 设 `NETEASE_API_BASE=http://ncm-api:3000`。VIP/无损依赖在**你自己的实例**上配置
+  网易云账号 cookie（建议小号；2024-10 曾有第三方登录封号潮，自行评估；本服务端不接触 cookie）。
+  建议实例侧 `ENABLE_GENERAL_UNBLOCK=false`——不希望把无版权歌曲换成灰色兜底源。
 
 ## 9. 测试策略
 

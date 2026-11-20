@@ -120,6 +120,12 @@ export class AgentService extends Context.Service<AgentService, {
 
 网页只用既有工具时间线；不维护导入卡片、不请求进度接口。目标必须是注册根或其**已存在**的相对子目录（不跟随子目录符号链接），导入期间固定可写目录句柄。只索引新下载的文件，不扫描整库。只接收 YouTube 视频或 `/playlist?list=…`；带 list 参数的 watch 链接只取单曲。每列表上限 25 首，单首最长 30 分钟、96 MiB；同目录同视频同模式不覆盖。每用户同时 1 次导入、全站 2 次；打断时取消未完成的工作，已经入库的文件保留。
 
+### 网易云导入
+
+`netease` 与 `youtube`/`lyrics` 同一个回环 MCP 监听（`/netease`，由 `youtube` MCP 的 Bun.serve 挂载，同一 bearer），同样是宿主生命周期内的 Streamable HTTP + Code Mode。工具两个：`tools.netease.search_netease({query})` 只搜不下载（至多 5 个 `{title,artist,album,songId,url,vip}`）；`await tools.netease.start_import_netease({url,folderId,subdirectory?})` 在原调用中等待下载、时长校验、打标签和入库，返回终态（`state`/计数/`trackIds`/按 `songId` 的 `failures` 与 `warnings`）。目标目录与来源无关，复用 `tools.youtube.list_folders` / `list_subdirectories` 选择。
+
+`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在匿名模式被预检跳过（`NETEASE_API_BASE` 配置后可重试）、25 首上限与歌手热门截断、实例建议（小号 + `ENABLE_GENERAL_UNBLOCK=false` + 本服务端不接触 cookie）、时长校验会丢弃疑似试听片段、导入自动带元数据与原文/翻译歌词。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。
+
 ## 5. Web 前端
 
 Android 0.1.4 起，管理员可在「设置 → 服务器管理」打开同一份 Web `AdminPage`。包括服务器音乐目录（新增、重命名、移出曲库）、增量／强制扫描与取消、用户增删、聊天／听写模型、供应商凭据、自定义兼容服务与 Console 设备授权。普通成员保留账号、服务器、扫描状态和退出入口。管理文档与会话文档使用不同本地源、WebView 和端口能力清单；聊天页不能发管理请求，服务端仍逐请求鉴权。Console 授权在系统浏览器的官方 HTTPS 页面完成。
