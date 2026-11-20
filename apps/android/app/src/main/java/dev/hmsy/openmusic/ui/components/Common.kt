@@ -28,11 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.hmsy.openmusic.core.Om
 import dev.hmsy.openmusic.core.OmType
+import dev.hmsy.openmusic.data.ApiError
 import dev.hmsy.openmusic.data.Page
 import dev.hmsy.openmusic.ui.icons.OmIcons
 import kotlinx.coroutines.launch
-/** 简易异步加载态（null=加载中） */
-data class LoadState<T>(val data: T? = null, val error: String? = null)
+/** 简易异步加载态（null=加载中）；status 为 ApiError 的 HTTP 状态码，非 ApiError 时为 null */
+data class LoadState<T>(val data: T? = null, val error: String? = null, val status: Int? = null)
 
 /** 分页状态：total=null 表示首页还在加载；ended = 已到末页 */
 data class PagedState<T>(
@@ -128,11 +129,19 @@ fun <T> rememberLoad(loader: suspend () -> T): Pair<LoadState<T>, () -> Unit> {
     state = LoadState<T>()
     runCatching { loader() }.fold(
       onSuccess = { state = LoadState(data = it) },
-      onFailure = { state = LoadState(error = it.message ?: it.toString()) },
+      onFailure = { e -> state = LoadState(error = e.message ?: e.toString(), status = (e as? ApiError)?.status) },
     )
   }
-  return LoadState(state.data, state.error) to { key++ }
+  return LoadState(state.data, state.error, state.status) to { key++ }
 }
+
+/**
+ * 实体详情页（专辑/艺人）错误文案裁决（纯函数，供 Album/Artist 屏共用）：
+ * - 404（status 或 LoadState 未带 status 时的裸 "404" 文案）→ 友好的「已不在曲库」，提供返回出口；
+ * - 其余错误（网络失败/500 等）→ 原样透传服务器文案，不得伪装成「已被移出/已删除」。
+ */
+fun detailEntityGone(entity: String, status: Int?, error: String): String =
+  if (status == 404 || error.trim() == "404") "这${entity}已不在曲库中（可能其曲目都已被移出）。" else error
 
 @Composable
 fun LoadingView(modifier: Modifier = Modifier) {
