@@ -195,7 +195,7 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 `/api/v1/imports/youtube` 以下端点都需要用户 cookie。`POST /search {query}` 返回至多 5 个 `{title,channel,url}`；`POST /requests {url,folderId,subdirectory?,sessionID?}` 在本次请求中等待导入结束，返回 `state`（`done`、`partial` 或 `failed`）、目录、计数、`failures` 与可播放的 `trackIds`，不返回运行中句柄。相同用户、会话、URL 和目标的并发请求共享终态结果。没有任务列表或清理接口。目录列表来自 `GET /api/v1/music-folders`；只有管理员可以增删改曲库根目录。
 # 网易云音乐导入（第一方 API）
 
-**合规边界**：本功能只做「导入网易云链接/搜索结果」，明文公开接口全部直连 music.163.com，仓库不含任何加密实现（weapi/eapi），不接触用户 cookie，不做灰色歌曲换源。VIP/无损依赖用户**自建**的 NeteaseCloudMusicApi 兼容实例（`NETEASE_API_BASE`，cookie 配在该实例上）。
+**合规边界**：本功能只做「导入网易云链接/搜索结果」，明文公开接口全部直连 music.163.com，仓库不含任何加密实现（weapi/eapi），不接触用户 cookie，不做灰色歌曲换源，也不支持任何第三方实例后端。VIP/付费歌曲有完整元数据与 `vip` 标记，导入时**明确跳过**。
 
 ## 1. 端点（`/api/v1/imports/netease`，均需用户 cookie）
 
@@ -205,30 +205,29 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 ```json
 { "url": "https://music.163.com/song?id=5264842", "kind": "song", "state": "done",
   "total": 1, "imported": 1, "skipped": 0, "failed": 0, "destination": "/music/网易云",
-  "quality": "exhigh", "trackIds": [42], "files": [{ "trackId": 42, "name": "Netease-5264842.mp3" }],
-  "failures": [{ "songId": "2606227455", "reason": "VIP/付费歌曲，匿名无法导入完整版（配置 NETEASE_API_BASE 后可重试）。" }],
+  "trackIds": [42], "files": [{ "trackId": 42, "name": "Netease-5264842.mp3" }],
+  "failures": [{ "songId": "2606227455", "reason": "VIP/付费歌曲需要会员账号，未导入。" }],
   "warnings": [{ "songId": "5264842", "message": "未取得歌词。" }] }
 ```
 
-`kind` 为 `song/playlist/album/artist`；`quality` 实例模式为请求档位（`NETEASE_QUALITY`），匿名模式为 `"anonymous"`。Single-flight 与 YouTube 相同：每用户 1 并发、全站 2；搜索全站 4；相同用户/会话/URL/目标的并发请求共享终态；无任务列表或轮询。
+`kind` 为 `song/playlist/album/artist`；每首实际音质档位存于 `netease_imports.quality`（匿名来源为 MP3 ≤320k）。Single-flight 与 YouTube 相同：每用户 1 并发、全站 2；搜索全站 4；相同用户/会话/URL/目标的并发请求共享终态；无任务列表。
 
 ## 2. 链接解析与规模
 
 只接受 music.163.com 的 `song/playlist/album/artist`（含 `#/song`、`y.` 前缀、`m/song/<id>` 变体；ID 为 1–20 位数字），**规范化重建后才访问**，绝不透传用户原始 URL；其他 host/路径一律 422。歌单/专辑最多 25 首：超限整组 422（歌单请拆分、专辑请逐首）；歌手热门固定取前 25 首（`singer` 来源本身只有热门 ~50 首）并记 warning。逐首独立处理，一首失败继续下一首，`failures` 按 `songId` 逐条说明。
 
-## 3. 双后端与预检
+## 3. 匿名音源与预检
 
-- **匿名 yt-dlp（默认，`NETEASE_API_BASE` 为空）**：`-f bestaudio/best`（netease 匿名只有 standard/higher/exhigh 三档 MP3，绝不套 YouTube 的 opus/aac 白名单），`--match-filters "!is_live & duration <= 1800"`、`--max-filesize 96M`。专辑走明文 `/api/album/{id}`（完整桌面 Chrome UA + Referer；该接口对匿名请求有间歇性 -462 风控，失败即报「暂时无法读取专辑」，配置实例后专辑改走实例）。匿名上限如实告知：约 320k MP3；海外直连对部分曲库有地区差异。
-- **实例模式（配置 `NETEASE_API_BASE`）**：统一走实例 REST（`/search`、`/song/detail`、`/album`、`/lyric`、`/song/url/v1?id=&level=NETEASE_QUALITY`），从实例返回的 CDN 地址直接下载（仅 `*.music.126.net`，MP3/FLAC，≤96 MiB，content-type/扩展名校验）。**不做静默 yt-dlp 回退**——实例不可用即失败，行为可预期。
-- **预检**：批量 `song/detail` 取 `fee` 与时长。匿名模式 `fee∈{1,4}` 直接跳过并记 `failures`（VIP/付费歌曲，匿名无法导入完整版）；实例模式全部尝试，成败由实例与时长校验决定。下架/地区限制由「详情缺失」与下载失败兜底。
+- **yt-dlp 匿名下载（唯一后端）**：`-f bestaudio/best`（netease 匿名只有 standard/higher/exhigh 三档 MP3，绝不套 YouTube 的 opus/aac 白名单），`--match-filters "!is_live & duration <= 1800"`、`--max-filesize 96M`。元数据与预检走明文 API（`/api/search/get`、`/api/song/detail`、`/api/song/lyric`，完整桌面 Chrome UA；专辑走 `/api/album/{id}` + Referer，该接口对匿名请求有间歇性 -462 风控，失败即报「暂时无法读取专辑」）。`NETEASE_REAL_IP` 可选伪装出口 IPv4（明文 `X-Real-IP` 头 / yt-dlp `--xff`）。匿名上限如实告知：约 320k MP3；海外直连对部分曲库有地区差异。
+- **预检**：批量 `song/detail` 取 `fee` 与时长。`fee∈{1,4}` 的 VIP/付费歌**无条件跳过**并记 `failures`（「VIP/付费歌曲需要会员账号，未导入。」）——不发起下载。下架/地区限制由「详情缺失」与下载失败兜底。
 
-## 4. VIP 试听防护（两模式必做）
+## 4. VIP 试听防护（双保险，不依赖预检）
 
-网易云 VIP 歌可能**静默**返回 30 秒 128k 试听片段（yt-dlp exit 0 无警告）。每次下载后用 ffprobe 核对实际时长 vs 预期时长（容差 `max(2 秒, 预期 1%)`）；不符即删除临时文件、记 `failures`（如「疑似试听片段：实际 30.0 秒 / 预期 281.4 秒，已丢弃未入库」），绝不入库。实例返回 `url:null`（无版权/需会员）或 `freeTrialInfo` 同样跳过。预期时长缺失也拒绝入库（无法校验）。
+网易云 VIP 歌可能**静默**返回 30 秒 128k 试听片段（yt-dlp exit 0 无警告）。每次下载后用 ffprobe 核对实际时长 vs 预期时长（容差 `max(2 秒, 预期 1%)`）；不符即删除临时文件、记 `failures`（如「疑似试听片段：实际 30.0 秒 / 预期 281.4 秒，已丢弃未入库」），绝不入库。预期时长缺失也拒绝入库（无法校验）。即使上游接口日后放宽 fee 标记，这道时长校验也不依赖预检独立生效。
 
 ## 5. 入库内容与歌词
 
-文件命名 `Netease-<songId>.mp3|flac`（`netease_imports` 溯源：song_id/导入者/实际音质档位）；同目录同 ID 已有文件记 `skipped` 不覆盖，想要更高音质请换目录或先移除旧文件。元数据（曲名/歌手/专辑/发行日/封面）来自网易云本身并内嵌文件标签，发行日即专辑发行日期（作为专辑年份，不同于 YouTube 的上传日）；封面仅接受 `*.music.126.net`（http 归一为 https，实际字节可能是 PNG 伪装 .jpg，写入端已兼容）。无 iTunes 目录补全。歌词：导入成功后原文+翻译（若有，等时间戳合并为「原文/译文」双行）自动存入共享歌词体系（0012 表，digest 去重）；失败仅记 `warnings`，不阻断导入。
+文件命名 `Netease-<songId>.mp3|flac`（`netease_imports` 溯源：song_id/导入者/实际音质档位）；同目录同 ID 已有文件记 `skipped` 不覆盖。元数据（曲名/歌手/专辑/发行日/封面）来自网易云本身并内嵌文件标签，发行日即专辑发行日期（作为专辑年份，不同于 YouTube 的上传日）；封面仅接受 `*.music.126.net`（http 归一为 https，实际字节可能是 PNG 伪装 .jpg，写入端已兼容）。无 iTunes 目录补全。歌词：导入成功后原文+翻译（若有，等时间戳合并为「原文/译文」双行）自动存入共享歌词体系（0012 表，digest 去重）；失败仅记 `warnings`，不阻断导入。
 # 助手消息投递
 
 `POST /api/v1/agent/sessions/:id/prompt` 可选 `delivery: "steer" | "queue"`。省略为 `steer`，允许在 busy 时提交，成功仍返回 204（已受理，不表示已投递）。`steer` 在可接收输入的步骤补充当前任务，不中断正在执行的工具；`queue` 留待后续轮次。`GET .../:id/inbox` 返回 `{busy,items:[{id,text,delivery}]}`，只投影本会话的待投递用户文本；`PATCH .../:id/inbox/:item {delivery}` 改方式，`DELETE .../:id/inbox/:item` 撤回。所有操作核验会话属主。网页 Enter 默认补充，忙碌时可点排队或 Alt+Enter；只在宿主投递后写入消息时间线，SSE 断线重连后从宿主恢复。

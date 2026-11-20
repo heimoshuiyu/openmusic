@@ -14,7 +14,7 @@
 - **TUI 客户端**（`apps/tui`）
 - **AI 音乐助手**（`docs/08`）：SSE 对话 + 13 个曲库工具（MCP，vendored OpenCode SDK），可改歌词/查库/听写
 - **YouTube 导入**（yt-dlp）：音频 + 人工字幕 + 元数据；按物理版本入库、支持确认式物理删除
-- **网易云音乐导入**（yt-dlp + 可选自建实例）：搜索/单曲/歌单/专辑/歌手热门，原文+翻译歌词自动入库；VIP 静默试听有时长校验防护
+- **网易云音乐导入**（yt-dlp 匿名）：搜索/单曲/歌单/专辑/歌手热门，原文+翻译歌词自动入库；VIP/付费歌曲明确跳过，下载后时长校验防试听片段
 - **音频流**：ffmpeg 直传/按需转码 + Range 断点续播；CUE 整轨虚拟分轨；同专辑多版本（canonical）管理
 
 ## 前置要求
@@ -22,7 +22,7 @@
 - Bun 1.x
 - PostgreSQL 17（下方 compose 提供，亦可自备）
 - ffmpeg / ffprobe（封面提取、转码、测试 fixture 必需）
-- 仅 YouTube/网易云导入需要：PATH 上的 `yt-dlp`，以及可 `import mutagen` 的 python3（容器内已内置）。网易云的 VIP/无损可选接自建 NeteaseCloudMusicApi 兼容实例（compose profile `netease`，见 docs/02 §8.2）
+- 仅 YouTube/网易云导入需要：PATH 上的 `yt-dlp`，以及可 `import mutagen` 的 python3（容器内已内置）
 
 ## 快速开始（开发）
 

@@ -59,8 +59,6 @@ export async function startServer() {
     agentEnabled: false,
     agentConfigPath: "",
     musicFoldersSeed: process.env.MUSIC_FOLDERS ?? "",
-    neteaseApiBase: "",
-    neteaseQuality: "exhigh",
     neteaseRealIp: "",
   })
 

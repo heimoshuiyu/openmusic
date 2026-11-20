@@ -218,8 +218,6 @@ beforeAll(async () => {
     agentEnabled: true,
     agentConfigPath: "",
     musicFoldersSeed: "",
-    neteaseApiBase: "",
-    neteaseQuality: "exhigh",
     neteaseRealIp: "",
   })
 

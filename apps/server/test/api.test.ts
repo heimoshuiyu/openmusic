@@ -66,8 +66,6 @@ const TestCfg = Layer.succeed(AppConfig, {
   agentEnabled: false,
   agentConfigPath: "",
   musicFoldersSeed: "",
-  neteaseApiBase: "",
-  neteaseQuality: "exhigh",
   neteaseRealIp: "",
 })
 

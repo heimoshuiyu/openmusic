@@ -28,9 +28,7 @@ services:
       DATABASE_URL: postgres://openmusic:${POSTGRES_PASSWORD:?Set a database password in .env}@db:5432/openmusic
       DATA_DIR: /data
       TRANSCODE_CACHE_DIR: /tmp/openmusic/transcode
-      # 网易云导入（docs/04）：留空 = 仅匿名 yt-dlp；指向可选的 ncm-api 服务即启用实例模式
-      NETEASE_API_BASE: ${NETEASE_API_BASE:-}
-      NETEASE_QUALITY: ${NETEASE_QUALITY:-exhigh}
+      # 网易云导入（docs/04）：可选，对网易云请求伪装的出口 IPv4
       NETEASE_REAL_IP: ${NETEASE_REAL_IP:-}
     ports:
       - "127.0.0.1:3000:3000"
@@ -38,22 +36,6 @@ services:
       - openmusic-data:/data
       # 音乐库只读挂载（按需修改路径）：
       # - /path/to/music:/music:ro
-
-  # 网易云导入的可选外置实例（兼容 NeteaseCloudMusicApi 4.x 协议）。默认部署不启动：
-  #   podman compose --profile netease up -d
-  # 并在 .env 设 NETEASE_API_BASE=http://ncm-api:3000。
-  # VIP/无损音质依赖在你自己的实例上配置网易云账号 cookie（建议小号；2024-10 曾有第三方
-  # 登录封号潮，自行评估风险；本服务端不接触 cookie）。建议保持 ENABLE_GENERAL_UNBLOCK=false，
-  # 不希望实例把无版权歌曲替换成灰色兜底源。具体环境变量名以所用镜像文档为准。
-  ncm-api:
-    image: docker.io/moefurina/ncm-api:4.41.1
-    container_name: openmusic-ncm-api
-    profiles: ["netease"]
-    environment:
-      ENABLE_GENERAL_UNBLOCK: "false"
-      # COOKIE: 按镜像文档填入你自己小号的网易云 cookie
-    ports:
-      - "127.0.0.1:3001:3000"
 
 volumes:
   openmusic-pgdata:

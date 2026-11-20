@@ -73,7 +73,7 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
         if (searches.has(owner) || searches.size >= 4) return Effect.fail(bad("正在搜索，请稍后再试。"))
         return Effect.acquireUseRelease(Effect.sync(() => searches.add(owner)), () => Effect.tryPromise({
           try: signal => searchSongs(query.trim(), runtime, signal).then(rows => rows.map(candidate)),
-          catch: () => bad("搜索失败，请检查服务器到网易云或 NETEASE_API_BASE 实例的网络连接。"),
+          catch: () => bad("搜索失败，请检查服务器到网易云的网络连接。"),
         }), () => Effect.sync(() => searches.delete(owner)))
       }),
       start: (owner, session, url, folderId, subdirectory) => Effect.gen(function* () {
@@ -93,7 +93,7 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
             // 1) Enumerate + batch precheck (fee/duration/title metadata per song).
             let items: Array<{ songId: string; brief: SongBrief | null }>, truncated = false, albumDate: string | null = null
             if (source.kind === "album") {
-              const album = await albumDetail(source.id, runtime, signal).catch(() => { signal.throwIfAborted(); throw bad("暂时无法读取专辑（接口风控或限制），请稍后重试或配置 NETEASE_API_BASE 实例。") })
+              const album = await albumDetail(source.id, runtime, signal).catch(() => { signal.throwIfAborted(); throw bad("暂时无法读取专辑（接口风控或限制），请稍后重试。") })
               if (!album.songs.length) throw bad("专辑内没有可导入的歌曲。")
               if (album.songs.length > SONG_LIMIT) throw bad(`专辑超过 ${SONG_LIMIT} 首（共 ${album.songs.length} 首），请分批或逐首导入。`)
               items = album.songs.map(brief => ({ songId: brief.songId, brief }))
@@ -102,7 +102,7 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
               let ids: string[]
               try { const list = await neteaseSongList(source, signal); ids = list.ids; truncated = list.truncated }
               catch { signal.throwIfAborted(); throw bad(source.kind === "artist" ? "无法读取歌手热门曲目，请检查网络。" : `无法读取歌单，请检查网络及条目数（1–${SONG_LIMIT} 首）。`) }
-              const details = await songDetails(ids, runtime, signal).catch(() => { signal.throwIfAborted(); throw bad("无法读取歌曲详情，请检查网络与 NETEASE_API_BASE 实例配置。") })
+              const details = await songDetails(ids, runtime, signal).catch(() => { signal.throwIfAborted(); throw bad("无法读取歌曲详情，请稍后重试。") })
               items = ids.map(songId => ({ songId, brief: details.get(songId) ?? null }))
             }
             const trackIds: number[] = [], files: { trackId: number; name: string }[] = []
@@ -112,7 +112,7 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
             for (const { songId, brief } of items) {
               signal.throwIfAborted()
               if (!brief) { failures.push({ songId, reason: "歌曲详情不可用（可能已下架或地区限制），已跳过。" }); continue }
-              if (!runtime.base && vipFee(brief.fee)) { failures.push({ songId, reason: VIP_SKIP_REASON }); continue }
+              if (vipFee(brief.fee)) { failures.push({ songId, reason: VIP_SKIP_REASON }); continue }
               if (!brief.durationMs) { failures.push({ songId, reason: "无法核对歌曲时长（详情缺失），已跳过。" }); continue }
               try {
                 const item = await importSong(songId, dest, signal, runtime, brief, albumDate,
@@ -145,7 +145,6 @@ export class NeteaseImports extends Context.Service<NeteaseImports, {
               url: source.url, kind: source.kind,
               state: !failures.length ? "done" : trackIds.length ? "partial" : "failed",
               total: items.length, imported, skipped, failed: failures.length, destination,
-              quality: runtime.base ? runtime.level : "anonymous",
               trackIds, files, failures, warnings,
             }
           } finally { await dest.close() }

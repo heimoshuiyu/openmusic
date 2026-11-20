@@ -8,13 +8,13 @@ export const NeteaseCandidate = Schema.Struct({
 })
 export type NeteaseCandidate = typeof NeteaseCandidate.Type
 
-/** 与 youtube 的 ImportResult 同形（failures/warnings 按 songId）；quality 为实例档位或 "anonymous"。 */
+/** 与 youtube 的 ImportResult 同形（failures/warnings 按 songId）；每首实际音质档位存于 netease_imports。 */
 export const NeteaseImportResult = Schema.Struct({
   url: Schema.String,
   kind: Schema.Literals(["song", "playlist", "album", "artist"]),
   state: Schema.Literals(["done", "partial", "failed"]),
   total: Schema.Number, imported: Schema.Number, skipped: Schema.Number, failed: Schema.Number,
-  destination: Schema.String, quality: Schema.String,
+  destination: Schema.String,
   trackIds: Schema.Array(Schema.Int),
   files: Schema.Array(Schema.Struct({ trackId: Schema.Int, name: Schema.String })),
   failures: Schema.Array(Schema.Struct({ songId: Schema.String, reason: Schema.String })),

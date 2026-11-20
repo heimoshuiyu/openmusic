@@ -21,11 +21,7 @@ export interface AppConfigShape {
   readonly agentConfigPath: string
   /** 首启音乐目录种子（MUSIC_FOLDERS，逗号分隔绝对路径；仅 music_folders 为空时执行）；此后以 API 管理为准 */
   readonly musicFoldersSeed: string
-  /** 网易云导入（docs/04）：兼容 NeteaseCloudMusicApi 协议的自部署实例基址；空 = 仅匿名 yt-dlp */
-  readonly neteaseApiBase: string
-  /** 实例模式请求的音质档位（standard/higher/exhigh/lossless/hires/jyeffect/jymaster/sky） */
-  readonly neteaseQuality: string
-  /** 可选：对网易云请求伪装的出口 IP（明文 X-Real-IP 头 / 实例 realIP 参数 / yt-dlp --xff） */
+  /** 网易云导入（docs/04）：可选，对网易云请求伪装的出口 IPv4（明文 X-Real-IP 头 / yt-dlp --xff） */
   readonly neteaseRealIp: string
 }
 
@@ -52,8 +48,6 @@ export const AppConfigLive = Layer.effect(
     agentEnabled: Config.Boolean("AGENT_ENABLED").pipe(Config.withDefault(false)),
     agentConfigPath: Config.String("AGENT_CONFIG").pipe(Config.withDefault("")),
     musicFoldersSeed: Config.String("MUSIC_FOLDERS").pipe(Config.withDefault("")),
-    neteaseApiBase: Config.String("NETEASE_API_BASE").pipe(Config.withDefault("")),
-    neteaseQuality: Config.String("NETEASE_QUALITY").pipe(Config.withDefault("exhigh")),
     neteaseRealIp: Config.String("NETEASE_REAL_IP").pipe(Config.withDefault("")),
   }),
 )
