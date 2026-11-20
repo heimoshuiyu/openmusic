@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { Context } from "effect"
 import * as fs from "node:fs/promises"
+import * as os from "node:os"
 import * as path from "node:path"
 import { Pool } from "pg"
 import {
@@ -706,7 +707,7 @@ describe("大目录规模化", () => {
   }
 
   test("1100 文件：批插入库 → 空扫零处理 → 1100 消失分块删除 → Subsonic 目录下推", async () => {
-    scaleRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-scale-"))
+    scaleRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-scale-"))
     await fillScale(scaleRoot, 550)
     const created = await server.post("/api/v1/music-folders", { name: "scale", path: scaleRoot })
     expect(created.status).toBe(200)
@@ -827,7 +828,7 @@ describe("未知身份与封面健壮性", () => {
     await server.login() // 过滤运行（-t）时没有更早的登录用例，幂等补登
     // 造库：Album X（内嵌图只在 02，min(path) 是无图的 01）、Multi Disc（同名专辑跨两目录、
     // 各有 cover.jpg）、根目录 loose.flac + cover.jpg（诱惑 Unknown Album 挂封面）
-    const covRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-cov-"))
+    const covRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-cov-"))
     const gen = (args: ReadonlyArray<string>) => {
       const proc = Bun.spawnSync(["ffmpeg", "-y", "-v", "error", ...args])
       if (proc.exitCode !== 0) throw new Error(`ffmpeg: ${proc.stderr.toString().slice(0, 200)}`)
@@ -975,7 +976,7 @@ describe("未知身份与封面健壮性", () => {
  *  消失清理只在 walk 零错误时执行（索引侧照常：可读部分继续入库） */
 describe("瞬时读错误不清库", () => {
   test("子目录/根不可读：记错误跳过、曲目保留；恢复后自愈；完整扫描清理照常", async () => {
-    const flakyRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-flaky-"))
+    const flakyRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-flaky-"))
     const gen = (args: ReadonlyArray<string>) => {
       const proc = Bun.spawnSync(["ffmpeg", "-y", "-v", "error", ...args])
       if (proc.exitCode !== 0) throw new Error(`ffmpeg: ${proc.stderr.toString().slice(0, 200)}`)
@@ -1048,7 +1049,7 @@ describe("瞬时读错误不清库", () => {
  *  - opus 快速解析拿不到时长 → 重解析兜底 */
 describe("CUE 虚拟分轨与超长时长", () => {
   test("整轨虚拟化全链路 + cue 增删迁移 + opus 时长重试", async () => {
-    const cueRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-cue-"))
+    const cueRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-cue-"))
     const gen = (args: ReadonlyArray<string>) => {
       const proc = Bun.spawnSync(["ffmpeg", "-y", "-v", "error", ...args])
       if (proc.exitCode !== 0) throw new Error(`ffmpeg: ${proc.stderr.toString().slice(0, 200)}`)
@@ -1262,7 +1263,7 @@ describe("CUE 虚拟分轨与超长时长", () => {
 describe("专辑归组推断", () => {
   test("VA 合并 / 碟号目录 / 根封面 / 保留历史身份 / force 重扫", async () => {
     await server.login() // 过滤运行（-t）时没有更早的登录用例，幂等补登
-    const grpRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-grp-"))
+    const grpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-grp-"))
     const gen = (args: ReadonlyArray<string>) => {
       const proc = Bun.spawnSync(["ffmpeg", "-y", "-v", "error", ...args])
       if (proc.exitCode !== 0) throw new Error(`ffmpeg: ${proc.stderr.toString().slice(0, 200)}`)
@@ -1434,7 +1435,7 @@ describe("专辑归组推断", () => {
 describe("重复拷贝的标准版本视图", () => {
   test("双拷贝专辑：专辑页去重 + versionCount + 最优选择 + Subsonic 同步", async () => {
     await server.login()
-    const twinRoot = await fs.mkdtemp(path.join("/tmp/opencode", "om-twin-"))
+    const twinRoot = await fs.mkdtemp(path.join(os.tmpdir(), "om-twin-"))
     const gen = (args: ReadonlyArray<string>) => {
       const proc = Bun.spawnSync(["ffmpeg", "-y", "-v", "error", ...args])
       if (proc.exitCode !== 0) throw new Error(`ffmpeg: ${proc.stderr.toString().slice(0, 200)}`)

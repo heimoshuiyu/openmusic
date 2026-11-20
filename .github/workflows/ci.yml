@@ -14,6 +14,8 @@ jobs:
       # 依赖类型钉在根 package.json / bun.lock；冻结安装可拦住解析漂移
       - run: bun install --frozen-lockfile
       - run: bun run check
+      # media-probe 单测用 mutagen/PIL 造 OpusTags 多页 fixture（与 YouTube 导入的 python 依赖同源）
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-mutagen python3-pil
       - run: bun run test:unit
       # 说明：Android 构建需要 SDK 与本机工具链，暂不进 CI；
       # 服务端/前端类型与单测已覆盖大部分回归面。

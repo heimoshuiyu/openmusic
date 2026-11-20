@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import * as fs from "node:fs/promises"
+import * as os from "node:os"
 import * as path from "node:path"
 import { ffprobeMeta, probeMetadata, readMediaTags } from "./media-probe"
 
 describe("ffprobe 兜底元数据提取（ffprobeMeta）", () => {
   test("long multi-page OpusTags: full reader and stream-tag fallback both recover credits", async () => {
-    const dir = await fs.mkdtemp('/tmp/opencode/om-ogg-'), file = path.join(dir,'large.opus')
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'om-ogg-')), file = path.join(dir,'large.opus')
     try {
       expect(Bun.spawnSync(['ffmpeg','-v','error','-f','lavfi','-i','sine=duration=1',file]).exitCode).toBe(0)
       expect(Bun.spawnSync(['python3','-I','-c',
@@ -31,7 +32,7 @@ describe("ffprobe 兜底元数据提取（ffprobeMeta）", () => {
     expect(probeMetadata({streams:[streams[0]!]})).toBeNull()
   })
   test("正常 MP3：标签/时长/码率/采样率齐全", async () => {
-    const dir = await fs.mkdtemp("/tmp/opencode/om-probe-")
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "om-probe-"))
     const file = path.join(dir, "t.mp3")
     const gen = Bun.spawnSync([
       "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
@@ -59,7 +60,7 @@ describe("ffprobe 兜底元数据提取（ffprobeMeta）", () => {
   })
 
   test("FLAC 的大写 Vorbis 键也能取到（大小写不敏感查找）", async () => {
-    const dir = await fs.mkdtemp("/tmp/opencode/om-probe-")
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "om-probe-"))
     const file = path.join(dir, "t.flac")
     // FLAC 的 Vorbis 注释经 ffprobe 输出键名保持原样（ffprobe 会映射为小写——
     // 这里同时验证大小写归一查找对两种形态都稳）
@@ -79,7 +80,7 @@ describe("ffprobe 兜底元数据提取（ffprobeMeta）", () => {
 
   test("坏文件/不存在 → null（不抛）", async () => {
     expect(await ffprobeMeta("/nonexistent/nope.mp3")).toBeNull()
-    const dir = await fs.mkdtemp("/tmp/opencode/om-probe-")
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "om-probe-"))
     const file = path.join(dir, "junk.mp3")
     await fs.writeFile(file, "this is not audio at all")
     try {
