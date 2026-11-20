@@ -13,6 +13,7 @@ import { PlayRepo } from "../../repo/annotations"
 import { AgentSession, AgentService, AgentUnavailable, type AgentMessage } from "./agent-service"
 import { makeEventBridge } from "./event-bridge"
 import { makeProviderAdmin, waitForEntry } from "./provider-admin"
+import { seedNeteaseSkill } from "./skill-seed"
 import { transcriber } from "./voice"
 import { answeredQuestion, questionService } from './questions'
 import { YoutubeImports } from "../youtube/imports"
@@ -177,12 +178,11 @@ const seedSkill = (agentHome: string) =>
       } catch {
         await fs.writeFile(skillPath, EXPLORATION_SKILL, "utf8")
       }
-      // Netease import skill: seeded like youtube-metadata, never overwrites a tuned copy.
-      const neteaseSkill = path.join(agentHome, "skills/netease-import/SKILL.md")
-      await fs.mkdir(path.dirname(neteaseSkill), { recursive: true })
-      const bundledNetease = path.join(import.meta.dir, "skills/netease-import/SKILL.md")
-      await fs.copyFile(bundledNetease, neteaseSkill, fs.constants.COPYFILE_EXCL)
-        .catch(async (e: NodeJS.ErrnoException) => { if (e.code !== "EEXIST") throw e })
+      // Netease import skill: fresh dirs seed the bundled text; an existing copy upgrades
+      // only when byte-identical to a known official stale seed (hand-tuned copies stay
+      // untouched). Real IO errors (missing bundled file, permissions) rethrow through the
+      // seedSkill catch below — same fail-loud posture as the youtube branch.
+      await seedNeteaseSkill(agentHome)
     },
     catch: hostError("探索技能 seed 失败（不影响宿主启动）"),
   })

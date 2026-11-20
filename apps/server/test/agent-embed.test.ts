@@ -44,6 +44,8 @@ let scope: Scope.Scope | undefined
 let sqlContext: Context.Context<SqlClient.SqlClient> | undefined
 let fetchEvents: (cookie?: string, query?: string) => Promise<Response>
 let disposeEvents: () => Promise<void>
+/** NETEASE_DELETE_FIXTURE 轮的目标 trackId（测试先造行再由 mock 注入 execute 沙盒代码） */
+let neteaseDeleteTrackId = 0
 
 const PROVIDER_ID = Provider.ID.make("om-test")
 const MODEL_ID = Model.ID.make("echo")
@@ -118,7 +120,7 @@ beforeAll(async () => {
       const hasToolResult = (body.messages ?? []).some((message) => message.role === "tool")
       const mode: "tool" | "done" | "plain" = isAgentLoop ? (hasToolResult ? "done" : "tool") : "plain"
       const outputs = (body.messages ?? []).filter(m => m.role === "tool")
-      const importOutput = bodyText.includes("YT_IMPORT_FIXTURE") && outputs.length === 1 && typeof outputs[0]?.content === "string"
+      const importOutput = (bodyText.includes("YT_IMPORT_FIXTURE") || bodyText.includes("NETEASE_IMPORT_FIXTURE")) && outputs.length === 1 && typeof outputs[0]?.content === "string"
         ? outputs[0].content : undefined
       const imported = importOutput?.includes('"trackIds"') ? JSON.parse(importOutput) as {trackIds:number[]} : null
       const wantTool = mode === "tool" || (isAgentLoop && !!imported)
@@ -131,6 +133,16 @@ beforeAll(async () => {
            const folder = folders.find(f => f.name === "Fixture Live" && f.writable);
            const children = unpack(await tools.youtube.list_subdirectories({folderId:folder.id}));
            return tools.youtube.start_import({url:"https://youtu.be/${bodyText.includes("YT_CANCEL_FIXTURE") ? "0123456789a" : "abcdefghijk"}", folderId:folder.id, subdirectory:children.directories.find(d => d === "Sessions")});`
+        : bodyText.includes('NETEASE_IMPORT_FIXTURE') ? `const unpack = r => typeof r === "string" ? JSON.parse(r) : r;
+           const folders = unpack(await tools.youtube.list_folders({}));
+           const folder = folders.find(f => f.name === "Netease Live" && f.writable);
+           const children = unpack(await tools.youtube.list_subdirectories({folderId:folder.id}));
+           return tools.netease.start_import_netease({url:"https://music.163.com/song?id=${bodyText.includes("NETEASE_CANCEL_FIXTURE") ? "186016" : "5264842"}", folderId:folder.id, subdirectory:children.directories.find(d => d === "Sessions")});`
+        : bodyText.includes('NETEASE_SEARCH_FIXTURE') ? 'return tools.netease.search_netease({query:"晴天"})'
+        : bodyText.includes('NETEASE_DELETE_FIXTURE') ? `const unpack = r => typeof r === "string" ? JSON.parse(r) : r;
+           const info = unpack(await tools.netease.get_metadata_netease({trackId: ${neteaseDeleteTrackId}}));
+           const req = unpack(await tools.netease.request_file_deletion_netease({trackId: ${neteaseDeleteTrackId}}));
+           return {info, req};`
         : bodyText.includes('LYRIC_BIND_FIXTURE') ? `const trackId="${alphaId}";
           const edit=await tools.lyrics.edit({trackId,text:"[00:01.25]Fixture verse"});
           await tools.lyrics.bind({trackId,mode:"none"}); const hidden=await tools.lyrics.read({trackId});
@@ -239,6 +251,10 @@ beforeAll(async () => {
     ) as Effect.Effect<Context.Context<AgentService>, never, never>,
   )
   agent = Context.get(context as Context.Context<AgentService>, AgentService)
+  // netease-import skill 干净 seed：随机 dataDir → COPYFILE_EXCL 落 bundled 原文
+  //（旧种子升级/手改保留的决策面见 src/service/agent/skill-seed.test.ts）
+  expect(await fs.readFile(path.join(dataDir, "agent-home/skills/netease-import/SKILL.md"), "utf8"))
+    .toEqual(await fs.readFile(path.join(import.meta.dir, "../src/service/agent/skills/netease-import/SKILL.md"), "utf8"))
   const web = HttpRouter.toWebHandler(AgentEventsRoutesLive.pipe(
     Layer.provide(Layer.succeed(AgentService, agent)), Layer.provide(Auth.layer),
     Layer.provide(TestAppConfig), Layer.provide(TestPg), Layer.provide(HttpServer.layerServices),
@@ -407,6 +423,173 @@ describe("内嵌宿主端到端（A1）", () => {
       expect(await fs.readdir(path.join(root,"Sessions"))).toEqual(["YouTube-abcdefghijk.opus"])
     } finally { process.env.PATH=previous; await pool.end() }
   },30_000)
+
+  // ---- 网易云 MCP：同一宿主/同一 Code Mode 链路上的三个会话级全链 ----
+  // music.163.com 与 *.music.126.net 全部走 globalThis.fetch mock，媒体下载走 PATH 注入的
+  // 本地 yt-dlp fixture——零外网、零真实模型；归属解析经 agent_sessions 真库反查。
+
+  /** 与 test/netease-import.test.ts 同源的详情/搜索 fixture（一次性会话内 mock） */
+  const neteaseFetchMock = (originalFetch: typeof fetch) => {
+    const detail = (id: string) => id === "5264842"
+      ? { id: 5264842, name: "晴天", artists: [{ name: "周杰伦" }], album: { name: "叶惠美", picUrl: "http://p1.music.126.net/6TqR_U__xy.jpg" }, fee: 8, duration: 2000 }
+      : { id: Number(id), name: `网易歌曲 ${id}`, artists: [{ name: "歌手甲" }], album: { name: "网易专辑", picUrl: "http://p1.music.126.net/6TqR_U__xy.jpg" }, fee: 8, duration: 2000 }
+    const vip = { id: 2606227455, name: "VIP 歌曲", artists: [{ name: "某人" }], album: { name: "专辑" }, fee: 1, duration: 281000 }
+    return Object.assign((arg: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const u = new URL(arg instanceof Request ? arg.url : arg.toString())
+      if (u.hostname === "music.163.com") {
+        if (u.pathname === "/api/search/get") return Promise.resolve(Response.json({ code: 200, result: { songs: [detail("5264842"), vip] } }))
+        if (u.pathname === "/api/song/detail") {
+          const ids = (u.searchParams.get("ids") ?? "").replace(/^\[|\]$/g, "").split(",").filter(Boolean)
+          return Promise.resolve(Response.json({ code: 200, songs: ids.map(detail) }))
+        }
+        if (u.pathname === "/api/song/lyric") return Promise.resolve(Response.json({ code: 200, lrc: { lyric: "[00:01.00]原文" }, tlyric: { lyric: "[00:01.00]译文" } }))
+      }
+      if (u.hostname === "p1.music.126.net")
+        return Promise.resolve(new Response(new Uint8Array(Bun.spawnSync(["ffmpeg","-v","error","-f","lavfi","-i","color=c=red:s=40x40","-frames:v","1","-c:v","mjpeg","-f","image2pipe","pipe:1"]).stdout)))
+      return originalFetch(arg, init)
+    }, { preconnect: originalFetch.preconnect })
+  }
+
+  /** 会话里上一轮 execute 的工具结果（content 为 JSON 文本）；找不到返回 undefined */
+  const toolResult = async (own: { userId: number; sessionID: string }, marker: string) => {
+    for (const record of recorded.filter(r => r.body.includes(marker) && r.body.includes("coding agent harness")).reverse()) {
+      const message = JSON.parse(record.body).messages?.find((m: { role: string }) => m.role === "tool")
+      if (typeof message?.content === "string") return message.content
+    }
+    return undefined
+  }
+
+  test("网易云搜索会话：search_netease 经 Code Mode 全链返回候选（含 vip 标记）", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = neteaseFetchMock(originalFetch)
+    try {
+      const s = await run(agent!.createSession({ userId: userA }))
+      const marker = "NETEASE_SEARCH_FIXTURE"
+      await run(agent!.prompt({ userId: userA, sessionID: s.id, text: `${marker} 帮我在网易云搜「晴天」，把候选和 VIP 标记告诉我` }))
+      let content: string | undefined
+      await until(async () => (content = await toolResult({ userId: userA, sessionID: s.id }, marker)) !== undefined, 15_000, "netease.search_netease 工具结果回传")
+      // 归属解析经 agent_sessions 真库反查成功（失败会回「无法验证会话」而非候选）
+      expect(content).not.toContain("无法验证会话")
+      const out = JSON.parse(content!) as Array<{ title: string; artist: string; album: string; songId: string; url: string; vip: boolean }>
+      expect(out).toEqual([
+        { title: "晴天", artist: "周杰伦", album: "叶惠美", songId: "5264842", url: "https://music.163.com/song?id=5264842", vip: false },
+        { title: "VIP 歌曲", artist: "某人", album: "专辑", songId: "2606227455", url: "https://music.163.com/song?id=2606227455", vip: true },
+      ])
+      await until(async () => (await run(agent!.messages({ userId: userA, sessionID: s.id })))
+        .some(m => m.role === "assistant" && m.text.includes("DONE")), 15_000, "assistant DONE")
+      const history = await run(agent!.messages({ userId: userA, sessionID: s.id }))
+      const parts = history.flatMap(m => m.parts ?? [])
+      // Code Mode 内层调用的名字可能是带命名空间的完整路径，只钉关键段与状态
+      expect(parts.some(p => p.type === "tool" && p.calls.some(c => c.name.includes("search_netease") && c.status === "done"))).toBe(true)
+    } finally { globalThis.fetch = originalFetch }
+  }, 30_000)
+
+  test("网易云导入会话：start_import_netease 等终态，真实 trackIds 回传后请求播放；interrupt 终止下载进程", async () => {
+    const root = path.join(dataDir, "netease-music"), bin = path.join(dataDir, "netease-bin"), previous = process.env.PATH
+    const pool = new Pool({ connectionString: TEST_DB_URL })
+    const originalFetch = globalThis.fetch
+    try {
+      await fs.mkdir(path.join(root, "Sessions"), { recursive: true }); await fs.mkdir(bin)
+      globalThis.fetch = neteaseFetchMock(originalFetch)
+      // 本地确定性 yt-dlp：单曲下载 = 真 ffmpeg 产物 + after_move 摘要（netease-import.test 同款）
+      await fs.writeFile(path.join(bin, "yt-dlp"), `#!/bin/sh
+for arg do last="$arg"; done
+id=\${last##*id=}
+case "$id" in ''|*[!0-9]*) exit 3;; esac
+ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a libmp3lame -b:a 128k audio.mp3 || exit 1
+printf '{"id":"%s","title":"网易云歌曲 %s","creators":[{"name":"歌手甲"}],"album":"网易专辑","album_artists":[{"name":"专辑艺人"}],"timestamp":1060646400,"thumbnail":"http://p1.music.126.net/6TqR_U__xy.jpg"}\\n' "$id" "$id"`, { mode: 0o700 })
+      process.env.PATH = `${bin}:${previous}`
+      const folder = await pool.query("insert into music_folders (path,name) values ($1,'Netease Live') returning id", [root])
+      const marker = "NETEASE_IMPORT_FIXTURE"
+      const s = await run(agent!.createSession({ userId: userA }))
+      const ids: string[] = []
+      const sub = Effect.runFork(Stream.runForEach(agent!.events({ userId: userA }), event => Effect.sync(() => {
+        if (event.type === "client-action" && event.sessionID === s.id && event.kind === "play-now") ids.push(...event.tracks.map(t => String(t.id)))
+      })))
+      try {
+        await run(agent!.prompt({ userId: userA, sessionID: s.id, text: `${marker} 把 https://music.163.com/song?id=5264842 导入 Netease Live 的 Sessions，然后播放它` }))
+        await until(() => ids.length > 0, 40_000, "导入终态回传后模型用真实 trackIds 请求播放")
+        let content: string | undefined
+        await until(async () => (content = await toolResult({ userId: userA, sessionID: s.id }, marker)) !== undefined, 10_000, "netease.start_import_netease 工具结果在轮次请求里可见")
+        const out = JSON.parse(content!) as { state: string; trackIds: number[]; files: { trackId: number; name: string }[] }
+        expect(out.state).toBe("done")
+        expect(out.files).toEqual([{ trackId: expect.any(Number), name: "Netease-5264842.mp3" }])
+        const { rows } = await pool.query(
+          "select t.id, n.song_id, n.imported_by, n.quality from tracks t join netease_imports n on n.track_id=t.id where t.music_folder_id=$1 and t.path=$2",
+          [folder.rows[0].id, "Sessions/Netease-5264842.mp3"])
+        expect(rows).toHaveLength(1)
+        expect(rows[0]!.song_id).toBe("5264842")
+        expect(Number(rows[0]!.imported_by)).toBe(userA)
+        expect(ids).toEqual([String(rows[0]!.id)])
+        expect(out.trackIds).toEqual([Number(rows[0]!.id)])
+        expect(await fs.readdir(path.join(root, "Sessions"))).toEqual(["Netease-5264842.mp3"])
+        await until(async () => (await run(agent!.messages({ userId: userA, sessionID: s.id })))
+          .some(m => m.role === "assistant" && m.text.includes("DONE")), 15_000, "assistant DONE")
+        // 歌词自动入共享歌词体系（原文+译文等时间戳合并）
+        const lyric = await pool.query("select mode from track_lyrics where track_id=$1", [rows[0]!.id])
+        expect(lyric.rows).toHaveLength(1)
+      } finally { sub.interruptUnsafe() }
+
+      // 宿主打断按钮中止进行中的 MCP 导入：进程组不得变孤儿继续下载
+      const pidFile = path.join(bin, "started-pid")
+      await fs.writeFile(path.join(bin, "yt-dlp"), `#!/bin/sh\necho $$ > '${pidFile}'\nexec sleep 50\n`, { mode: 0o700 })
+      const cancelSession = await run(agent!.createSession({ userId: userA }))
+      await run(agent!.prompt({ userId: userA, sessionID: cancelSession.id, text: "NETEASE_IMPORT_FIXTURE NETEASE_CANCEL_FIXTURE 导入另一首" }))
+      await until(() => Bun.file(pidFile).exists(), 8_000, "netease MCP 已启动下载进程")
+      const pid = Number((await fs.readFile(pidFile, "utf8")).trim())
+      await run(agent!.interrupt({ userId: userA, sessionID: cancelSession.id }))
+      await until(() => { try { process.kill(pid, 0); return false } catch { return true } }, 5_000, "中断会话时终止 netease 下载")
+      expect(await fs.readdir(path.join(root, "Sessions"))).toEqual(["Netease-5264842.mp3"])
+    } finally { globalThis.fetch = originalFetch; process.env.PATH = previous; await pool.end() }
+  }, 60_000)
+
+  test("网易云管理会话：get_metadata + request_file_deletion 只回人工链接，token 永不下发、文件与曲库条目原样保留", async () => {
+    const pool = new Pool({ connectionString: TEST_DB_URL })
+    try {
+      // 直接造行（真实 mp3 + 匹配的 size/mtime）：复用导入链路之外验证管理工具的
+      // 票据语义——不依赖上一条测试的状态。
+      const root = path.join(dataDir, "netease-admin")
+      await fs.mkdir(path.join(root, "Sessions"), { recursive: true })
+      const media = path.join(root, "Sessions", "Netease-5264842.mp3")
+      expect(Bun.spawnSync(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:a", "libmp3lame", "-b:a", "128k", media]).exitCode).toBe(0)
+      const stat = await fs.stat(media)
+      // 与 scanner 一致的 mtime 落库口径（Math.floor(stat.mtimeMs)）——removals 内核按
+      // mtimeNs 截断毫秒比对，Math.round 会在余数 ≥500µs 时误判「文件已改变」
+      const one = async (sql: string, values: unknown[] = []) => (await pool.query(sql, values)).rows[0] as Record<string, unknown>
+      const folder = await one("insert into music_folders (path,name) values ($1,'Netease Admin') returning id", [root])
+      const artist = await one("insert into artists (name) values ('网易管理艺人') returning id")
+      const album = await one("insert into albums (artist_id, name, year) values ($1,'网易管理专辑',2003) returning id", [artist.id])
+      const track = await one(
+        `insert into tracks (music_folder_id, album_id, artist_id, disc, track_no, title, duration_seconds, format, codec, size_bytes, path, mtime_ms)
+         values ($1,$2,$3,1,1,'管理面曲目',2,'mp3','mp3',$4,'Sessions/Netease-5264842.mp3',$5) returning id`,
+        [folder.id, album.id, artist.id, stat.size, Math.floor(stat.mtimeMs)])
+      await pool.query("insert into netease_imports(track_id,song_id,imported_by,quality) values ($1,'5264842',$2,'standard')", [track.id, userA])
+      neteaseDeleteTrackId = Number(track.id)
+
+      const s = await run(agent!.createSession({ userId: userA }))
+      const marker = "NETEASE_DELETE_FIXTURE"
+      await run(agent!.prompt({ userId: userA, sessionID: s.id, text: `${marker} 我要求把这首连原文件一起删掉` }))
+      let content: string | undefined
+      await until(async () => (content = await toolResult({ userId: userA, sessionID: s.id }, marker)) !== undefined, 15_000, "netease 管理工具结果回传")
+      const out = JSON.parse(content!) as { info: { trackId: string; songId: string; filename: string }; req: Record<string, unknown> }
+      expect(out.info).toMatchObject({ trackId: String(track.id), songId: "5264842", filename: "Netease-5264842.mp3", quality: "standard" })
+      // 票据只给人工确认链接；token 永不随工具结果下发（确认页专属）
+      expect(out.req).not.toHaveProperty("token")
+      expect(out.req.state).toBe("awaiting_human")
+      expect(out.req.fileDeleted).toBe(false)
+      expect(out.req.reviewPath).toBe(`/review-deletion/${out.req.requestId}`)
+      expect(out.req.link).toBe(`[核对并确认删除文件](${out.req.reviewPath})`)
+      expect(Number(out.req.expiresAt)).toBeGreaterThan(Date.now())
+      expect(Number(out.req.expiresAt)).toBeLessThanOrEqual(Date.now() + 5 * 60_000)
+      // 工具本身绝不删除：文件、曲库条目、溯源行全部原样
+      expect(await fs.stat(media)).toBeTruthy()
+      expect((await pool.query("select 1 from tracks where id=$1", [track.id])).rows).toHaveLength(1)
+      expect((await pool.query("select 1 from netease_imports where track_id=$1", [track.id])).rows).toHaveLength(1)
+      await until(async () => (await run(agent!.messages({ userId: userA, sessionID: s.id })))
+        .some(m => m.role === "assistant" && m.text.includes("DONE")), 15_000, "assistant DONE")
+    } finally { await pool.end() }
+  }, 30_000)
+
   test(
     "会话创建 + 归属登记",
     async () => {
