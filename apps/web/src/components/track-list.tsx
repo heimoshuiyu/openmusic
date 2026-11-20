@@ -26,9 +26,12 @@ const compactColumns = "grid-cols-[1.9rem_minmax(0,1.8fr)_minmax(0,1fr)_3.5rem]"
 export function TrackList({
   tracks,
   showAlbum = true,
+  manage,
 }: {
   tracks: ReadonlyArray<TrackSummary | DeletedTrackRow>
   showAlbum?: boolean
+  /** 可选的行级管理入口（如网易云导入管理）。未传入时不渲染任何新 UI，现有页面零变化。 */
+  manage?: React.ComponentType<{ track: TrackSummary }>
 }) {
   const playNow = usePlayer((s) => s.playNow)
   const enqueue = usePlayer((s) => s.enqueue)
@@ -191,6 +194,7 @@ export function TrackList({
                   {formatDuration(track.durationSeconds)}
                 </span>
                 <span className="flex items-center justify-end gap-1">
+                  {manage && <ManageSlot manage={manage} track={track} />}
                   <button
                     type="button"
                     aria-label={track.starred ? "取消收藏" : "收藏"}
@@ -221,6 +225,12 @@ export function TrackList({
       </div>
     </div>
   )
+}
+
+/** 可选行级管理插槽的渲染适配：独立小组件让 TS 把 undefined 收窄掉 */
+function ManageSlot({ manage, track }: { manage: React.ComponentType<{ track: TrackSummary }>; track: TrackSummary }) {
+  const Manage = manage
+  return <Manage track={track} />
 }
 
 /** 版本徽标（×N）：点击弹出该槽位全部物理副本（懒加载 /tracks/:id/versions），

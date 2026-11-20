@@ -16,6 +16,7 @@ import { AlbumsPage } from "@/pages/albums"
 import { AlbumPage } from "@/pages/album"
 import { TracksPage } from "@/pages/tracks"
 import { SearchPage } from "@/pages/search"
+import { ImportsPage } from "@/pages/imports"
 import { PlaylistsPage } from "@/pages/playlists"
 import { PlaylistPage } from "@/pages/playlist"
 import { FavoritesPage } from "@/pages/favorites"
@@ -89,6 +90,12 @@ const searchRoute = createRoute({
   component: SearchPage,
 })
 
+const importsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/imports",
+  component: ImportsPage,
+})
+
 const playlistsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/playlists",
@@ -147,6 +154,7 @@ const routeTree = rootRoute.addChildren([
     albumRoute,
     tracksRoute,
     searchRoute,
+    importsRoute,
     playlistsRoute,
     playlistRoute,
     favoritesRoute,

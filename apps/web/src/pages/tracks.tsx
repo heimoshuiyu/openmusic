@@ -3,6 +3,7 @@ import { api } from "@/api/client"
 import { TrackList } from "@/components/track-list"
 import { PageHeader, SortTabs } from "@/components/page"
 import { LoadMoreSentinel, useInfinitePages } from "@/components/infinite"
+import { TrackManageSlot } from "@/imports/import-manage"
 
 const SORTS = [
   { key: "", label: "默认" },
@@ -33,7 +34,7 @@ export function TracksPage() {
         <div className="text-sm text-dim">加载中…</div>
       ) : (
         <>
-          <TrackList tracks={items} />
+          <TrackList tracks={items} manage={TrackManageSlot} />
           <LoadMoreSentinel active={hasNextPage === true && !isFetchingNextPage} onLoadMore={fetchNextPage} />
           {isFetchingNextPage && <div className="py-3 text-center text-xs text-faint">加载更多…</div>}
           {hasNextPage !== true && items.length > 0 && (

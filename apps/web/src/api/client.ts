@@ -103,6 +103,84 @@ export interface ScanStatus {
 
 export interface MusicFolderDto { id: string; name: string; path: string; lastScanAt: string | null }
 
+// ---- imports/netease（docs/04 §网易云音乐导入；类型手工对齐 server domain/netease.ts）----
+
+export interface NeteaseCandidate {
+  title: string
+  artist: string
+  album: string
+  /** 1–20 位数字的网易云歌曲 ID */
+  songId: string
+  /** 规范化重建后的单曲链接（music.163.com/song?id=…） */
+  url: string
+  /** true 即 VIP/付费：元数据完整可见，导入时会被明确跳过 */
+  vip: boolean
+}
+
+export interface NeteaseImportResult {
+  url: string
+  kind: "song" | "playlist" | "album" | "artist"
+  state: "done" | "partial" | "failed"
+  total: number
+  imported: number
+  skipped: number
+  failed: number
+  destination: string
+  trackIds: number[]
+  files: Array<{ trackId: number; name: string }>
+  failures: Array<{ songId: string; reason: string }>
+  warnings: Array<{ songId: string; message: string }>
+}
+
+/** GET /api/v1/imports/netease/folders：管理员注册的曲库根目录 + 可写状态 */
+export interface NeteaseFolder { id: string; name: string; path: string; writable: boolean }
+
+/** 与 YouTube 同义的固定文本标签 + cover（data image、https *.music.126.net 或 "netease" 恢复网易云封面） */
+export interface NeteaseTags {
+  title?: string
+  artist?: string
+  album?: string
+  albumArtist?: string
+  genre?: string
+  trackNumber?: number
+  discNumber?: number
+  cover?: string
+}
+
+export interface NeteaseInfo {
+  trackId: string
+  songId: string
+  /** 实际音质档位（匿名来源为 MP3 ≤320k；旧档可为 null） */
+  quality: string | null
+  format: "mp3" | "flac"
+  filename: string
+  title: string
+  artist: string
+  album: string
+  albumArtist: string
+  genre: string | null
+  trackNumber: number | null
+  discNumber: number
+  hasCover: boolean
+  /** 仅写入曲库未嵌入文件等非致命提示 */
+  warnings?: string[]
+}
+
+export interface NeteaseDeleteRequest { requestId: string; reviewPath: string; expiresAt: number }
+
+/** 删除票据的人工核对信息：youtube 与 netease 同形，review-deletion 页共用 */
+export interface DeletionReview {
+  trackId: string
+  title: string
+  artist: string
+  filename: string
+  format: string
+  path: string
+  sizeBytes: number
+  expiresAt: number
+  token: string
+}
+
 // ---- agent（docs/04 §2.11；事件形状见 service/agent/embedded.ts 归一化）----
 
 export interface AgentSessionDto {
@@ -232,7 +310,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  reviewDeletion: (key:string) => request<{trackId:string;title:string;artist:string;filename:string;format:string;path:string;sizeBytes:number;expiresAt:number;token:string}>("POST",`/imports/youtube/file-deletion-requests/${encodeURIComponent(key)}/review`),
+  reviewDeletion: (key:string) => request<DeletionReview>("POST",`/imports/youtube/file-deletion-requests/${encodeURIComponent(key)}/review`),
   confirmDeletion: (key:string,token:string,filename:string) => request<void>("POST",`/imports/youtube/file-deletion-requests/${encodeURIComponent(key)}/confirm`,{token,filename}),
   cancelDeletion: (key:string) => request<void>("DELETE",`/imports/youtube/file-deletion-requests/${encodeURIComponent(key)}`),
   async transcribe(session: string, audio: Blob, signal: AbortSignal): Promise<string> {
@@ -310,6 +388,29 @@ export const api = {
     request<void>("POST", `/library/scan${force ? "?force=true" : ""}`),
   cancelScan: () => request<void>("DELETE", "/library/scan"),
   scanStatus: () => request<ScanStatus>("GET", "/library/scan-status"),
+
+  // ---- imports/netease（docs/04 §网易云音乐导入）----
+  neteaseSearch: (q: string) =>
+    request<NeteaseCandidate[]>("GET", `/imports/netease/search?q=${encodeURIComponent(q)}`),
+  // 同步等终态：可能持续数分钟；无任务句柄、无轮询接口（与服务端 single-flight 对齐）
+  neteaseImport: (payload: { url: string; folderId: string; subdirectory?: string }) =>
+    request<NeteaseImportResult>("POST", "/imports/netease/requests", payload),
+  neteaseFolders: () => request<NeteaseFolder[]>("GET", "/imports/netease/folders"),
+  neteaseSubdirectories: (folderId: string, subdirectory = "") =>
+    request<{ directories: string[]; truncated: boolean }>(
+      "GET", `/imports/netease/subdirectories?${toQuery({ folderId, subdirectory })}`),
+  neteaseInfo: (id: string) => request<NeteaseInfo>("GET", `/imports/netease/tracks/${encodeURIComponent(id)}/metadata`),
+  neteaseEdit: (id: string, tags: NeteaseTags) =>
+    request<NeteaseInfo>("PATCH", `/imports/netease/tracks/${encodeURIComponent(id)}/metadata`, tags),
+  neteaseUnindex: (id: string) => request<void>("DELETE", `/imports/netease/tracks/${encodeURIComponent(id)}/library-entry`),
+  neteaseRequestDeletion: (id: string) =>
+    request<NeteaseDeleteRequest>("POST", `/imports/netease/tracks/${encodeURIComponent(id)}/file-deletion-requests`),
+  neteaseReviewDeletion: (key: string) =>
+    request<DeletionReview>("POST", `/imports/netease/file-deletion-requests/${encodeURIComponent(key)}/review`),
+  neteaseConfirmDeletion: (key: string, token: string, filename: string) =>
+    request<void>("POST", `/imports/netease/file-deletion-requests/${encodeURIComponent(key)}/confirm`, { token, filename }),
+  neteaseCancelDeletion: (key: string) =>
+    request<void>("DELETE", `/imports/netease/file-deletion-requests/${encodeURIComponent(key)}`),
 
   users: () => request<Page<UserPublic>>("GET", "/users?limit=100"),
   createUser: (username: string, password: string, isAdmin = false) =>

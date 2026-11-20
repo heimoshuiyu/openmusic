@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 import {
   Bot,
+  Download,
   Heart,
   Menu,
   X,
@@ -149,6 +150,7 @@ export function AppLayout() {
               {[
                 { to: "/search", label: "搜索", icon: Search },
                 { to: "/favorites", label: "收藏", icon: Heart },
+                { to: "/imports", label: "导入", icon: Download },
               ].map((item) => (
                 <Link
                   key={item.to}
@@ -249,7 +251,7 @@ export function AppLayout() {
           <div className="mb-3 flex items-center justify-between"><Wordmark/><button type="button" className="p-3" aria-label="关闭导航" onClick={()=>menu.current?.close()}><X size={18}/></button></div>
           <nav onClick={e=>{if((e.target as Element).closest('a')) menu.current?.close()}}>
             {libraryNav}
-            {[{to:"/search",label:"搜索"},{to:"/favorites",label:"收藏"},{to:"/playlists",label:"播放列表"},{to:"/assistant",label:"音乐助手"},...(isAdmin?[{to:"/admin",label:"管理"}]:[])].map(item=><Link key={item.to} to={item.to} className={navClass}>{item.label}</Link>)}
+            {[{to:"/search",label:"搜索"},{to:"/favorites",label:"收藏"},{to:"/imports",label:"导入"},{to:"/playlists",label:"播放列表"},{to:"/assistant",label:"音乐助手"},...(isAdmin?[{to:"/admin",label:"管理"}]:[])].map(item=><Link key={item.to} to={item.to} className={navClass}>{item.label}</Link>)}
           </nav>
         </dialog>
 
