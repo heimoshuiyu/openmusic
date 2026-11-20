@@ -122,9 +122,20 @@ export class AgentService extends Context.Service<AgentService, {
 
 ### 网易云导入
 
-`netease` 与 `youtube`/`lyrics` 同一个回环 MCP 监听（`/netease`，由 `youtube` MCP 的 Bun.serve 挂载，同一 bearer），同样是宿主生命周期内的 Streamable HTTP + Code Mode。工具两个：`tools.netease.search_netease({query})` 只搜不下载（至多 5 个 `{title,artist,album,songId,url,vip}`）；`await tools.netease.start_import_netease({url,folderId,subdirectory?})` 在原调用中等待下载、时长校验、打标签和入库，返回终态（`state`/计数/`trackIds`/按 `songId` 的 `failures` 与 `warnings`）。目标目录与来源无关，复用 `tools.youtube.list_folders` / `list_subdirectories` 选择。
+`netease` 与 `youtube`/`lyrics` 同一个回环 MCP 监听（`/netease`，由 `youtube` MCP 的 Bun.serve 挂载，同一 bearer），同样是宿主生命周期内的 Streamable HTTP + Code Mode。工具六个：`tools.netease.search_netease({query})` 只搜不下载（至多 5 个 `{title,artist,album,songId,url,vip}`）；`await tools.netease.start_import_netease({url,folderId,subdirectory?})` 在原调用中等待下载、时长校验、打标签和入库，返回终态（`state`/计数/`trackIds`/按 `songId` 的 `failures` 与 `warnings`）。目标目录与来源无关，复用 `tools.youtube.list_folders` / `list_subdirectories` 选择。
 
-`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。
+曲目管理四件（与 youtube 组同语义，服务端走同一共享移除内核）：
+
+- `tools.netease.get_metadata_netease({trackId})`：查看标签、来源 `songId`、实际音质档位与封面状态。登录会话内只读。
+- `tools.netease.edit_metadata_netease({trackId, metadata})`：只改传入字段，保留 ID 与文件名、不重新下载；`cover` 支持 `"netease"`（回源恢复）、`*.music.126.net` 链接或 data:image 内联图；文本未能嵌入文件时如实返回 `warnings`。仅导入者或管理员。
+- `tools.netease.remove_from_library_netease({trackId})`：仅在用户明确要求移出曲库时调用；只删曲库条目、保留磁盘文件，返回 `{removedFromLibrary:true, fileDeleted:false}`。
+- `tools.netease.request_file_deletion_netease({trackId})`：仅在用户明确要求连原文件一起删除时调用；只创建 5 分钟人工确认链接，返回 `{requestId, reviewPath, expiresAt, state:"awaiting_human", fileDeleted:false}` 与 Markdown 链接。**助手没有 confirm/review 工具，也不得请求任何确认类工具**——token 与确认页只属于票据属主本人（Web `/review-deletion/:requestId`，逐字输入文件名），对话里不代确认、不声称已删除。
+
+**权限 action 名（窄 allow-list 部署必须显式放行）**：Code Mode 工具的权限 action 是下划线全名——`netease_search_netease`、`netease_start_import_netease`、`netease_get_metadata_netease`、`netease_edit_metadata_netease`、`netease_remove_from_library_netease`、`netease_request_file_deletion_netease`（youtube/lyrics 同理，如 `youtube_start_import`）。**未匹配任何规则的 action 默认落到 `ask`，而内嵌宿主没有应答权限请求的通道**（事件桥只投影消息/工具/执行事件，无权限卡片）——落到 `ask` 的调用会挂起直到会话被 interrupt 或宿主关闭，表现为「助手卡死」而非报错。因此窄 allow-list 姿态在本部署形态下不可用：保持 `allow *` + 显式 deny（`edit/bash/write/shell/webfetch` deny、`websearch` allow）的清单，或为上面每个 action 显式写 `allow` 规则。
+
+`netease-import` skill（`agent-home/skills/`，embedded seed）教助手：何时选网易云 vs YouTube（主流发行室版本 vs 视频/现场/自唱）、VIP/付费在预检即被明确跳过（failures 里说明「VIP/付费歌曲需要会员账号，未导入」）、25 首上限与歌手热门截断、时长校验会丢弃疑似试听片段（双保险不依赖预检）、导入自动带元数据与原文/翻译歌词、匿名 320k 上限与海外地区差异如实告知，以及管理四件的纪律（先 get 核对、edit 只传要改的字段、移出与删除都须用户明确要求、删除只给人工链接）。REST 等价端点见 docs/04 网易云导入组；MCP 打断走宿主 interrupt（与 `youtube.start_import` 同款 per-session abort）。
+
+skill seed 升级：bundled 文案演进时，seed 只对「逐字节等于已知官方旧种子」的副本做迁移（当前清单：d6b8e2d 双后端中间版与 9039856 匿名 v1，见 `service/agent/skill-seed.ts` 的 `STALE_NETEASE_SEEDS`）；任何 checksum 不匹配的实例视为用户手改，原样保留（skill Watcher 热刷新，手改即生效）。
 
 ## 5. Web 前端
 
