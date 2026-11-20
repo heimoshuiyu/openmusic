@@ -142,6 +142,24 @@ class OmApi(
   @Serializable
   private data class RecordPlayBody(val listenedSeconds: Int)
 
+  @Serializable
+  private data class NeteaseImportBody(val url: String, val folderId: String, val subdirectory: String? = null)
+
+  @Serializable
+  private data class NeteaseTagsBody(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val albumArtist: String? = null,
+    val genre: String? = null,
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val cover: String? = null,
+  )
+
+  @Serializable
+  private data class NeteaseConfirmBody(val token: String, val filename: String)
+
 
   // ── 认证 ──────────────────────────────────────────────
   suspend fun login(username: String, password: String): UserPublic =
@@ -221,6 +239,96 @@ class OmApi(
   // ── 库管理 ────────────────────────────────────────────
   suspend fun scanStatus(): ScanStatus = request("GET", "/api/v1/library/scan-status")
   suspend fun scan() { request<Unit>("POST", "/api/v1/library/scan") }
+
+  // ── 网易云导入（docs/04 导入组）─────────────────────────
+
+  /** 服务端同步等终态（多曲分钟级）：只放宽读超时；连接池与 cookie 随共享 builder 继承。 */
+  private val longClient by lazy { client.newBuilder().readTimeout(10, TimeUnit.MINUTES).build() }
+
+  /** 空格/加号编码歧义统一走 %20（URLSearchParams 与字面解码两种解析器下都正确） */
+  private fun encodeParam(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+  private fun encodePath(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+
+  suspend fun neteaseSearch(q: String): List<NeteaseCandidate> =
+    request("GET", "/api/v1/imports/netease/search?q=${encodeParam(q)}")
+
+  /** 导入目标目录（含 writable；不可写目录在 UI 层前置禁止提交） */
+  suspend fun neteaseFolders(): List<NeteaseFolder> = request("GET", "/api/v1/imports/netease/folders")
+
+  /** 单层子目录浏览：subdirectory 传空 = 曲库根目录 */
+  suspend fun neteaseSubdirectories(folderId: String, subdirectory: String): NeteaseChildren =
+    request("GET", "/api/v1/imports/netease/subdirectories?folderId=${encodeParam(folderId)}&subdirectory=${encodeParam(subdirectory)}")
+
+  /** 同步等待导入终态；会话失效（401）由调用方照常处理 */
+  suspend fun neteaseImport(url: String, folderId: String, subdirectory: String?): NeteaseImportResult =
+    withContext(Dispatchers.IO) {
+      longClient.newCall(
+        buildApiRequest(
+          "POST",
+          url("/api/v1/imports/netease/requests"),
+          json.encodeToString(NeteaseImportBody.serializer(), NeteaseImportBody(url, folderId, subdirectory?.takeIf { it.isNotBlank() })),
+        ),
+      ).execute().use { response ->
+        if (!response.isSuccessful) throw toError(response)
+        parseBody(response)
+      }
+    }
+
+  // ── 网易云导入管理（信息登录可读；修改/移出/删除仅导入者或管理员）──────────
+
+  suspend fun neteaseInfo(trackId: String): NeteaseInfo =
+    request("GET", "/api/v1/imports/netease/tracks/${encodePath(trackId)}/metadata")
+
+  /**
+   * 只提交显式变更过的字段（服务端标签为非空文本，空串会被 422 拒绝；null = 保持不变）。
+   * cover：null=不动，"netease"=恢复网易云封面，或 https 的 *.music.126.net 图片 URL。
+   */
+  suspend fun neteaseEditTags(
+    trackId: String,
+    title: String? = null,
+    artist: String? = null,
+    album: String? = null,
+    albumArtist: String? = null,
+    genre: String? = null,
+    trackNumber: Int? = null,
+    discNumber: Int? = null,
+    cover: String? = null,
+  ): NeteaseInfo =
+    request(
+      "PATCH",
+      "/api/v1/imports/netease/tracks/${encodePath(trackId)}/metadata",
+      json.encodeToString(
+        NeteaseTagsBody.serializer(),
+        NeteaseTagsBody(title, artist, album, albumArtist, genre, trackNumber, discNumber, cover),
+      ),
+    )
+
+  /** 移出曲库（索引删除，磁盘文件保留） */
+  suspend fun neteaseUnindex(trackId: String) {
+    request<Unit>("DELETE", "/api/v1/imports/netease/tracks/${encodePath(trackId)}/library-entry")
+  }
+
+  /** 申请删除原文件 → 人工核对票据（key = requestId） */
+  suspend fun neteaseRequestDeletion(trackId: String): NeteaseDeletionRequest =
+    request("POST", "/api/v1/imports/netease/tracks/${encodePath(trackId)}/file-deletion-requests")
+
+  suspend fun neteaseReviewDeletion(key: String): NeteaseDeletionReview =
+    request("POST", "/api/v1/imports/netease/file-deletion-requests/${encodePath(key)}/review")
+
+  /** 兑现删除：必须携带 review 发放的 token，且 filename 与人工逐字输入一致 */
+  suspend fun neteaseConfirmDeletion(key: String, token: String, filename: String) {
+    request<Unit>(
+      "POST",
+      "/api/v1/imports/netease/file-deletion-requests/${encodePath(key)}/confirm",
+      json.encodeToString(NeteaseConfirmBody.serializer(), NeteaseConfirmBody(token, filename)),
+    )
+  }
+
+  suspend fun neteaseCancelDeletion(key: String) {
+    request<Unit>("DELETE", "/api/v1/imports/netease/file-deletion-requests/${encodePath(key)}")
+  }
+
 
   // ── 媒体地址 ──────────────────────────────────────────
   fun streamUrl(trackId: String, transcode: Boolean = false): String =

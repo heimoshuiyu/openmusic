@@ -144,6 +144,91 @@ data class ListeningSummary(
   val listenedSeconds: Int,
 )
 
+// ── 网易云导入（docs/04 导入组；与 server domain/netease.ts 及 netease 管理端点同形）──────
+
+/** 搜索候选：url 为规范化重建的 music.163.com 单曲链接；vip=true 即 VIP/付费（导入时明确跳过） */
+@Serializable
+data class NeteaseCandidate(
+  val title: String,
+  val artist: String,
+  val album: String,
+  val songId: String,
+  val url: String,
+  val vip: Boolean = false,
+)
+
+@Serializable
+data class NeteaseFile(val trackId: Long, val name: String)
+
+/** failures 按 {songId, reason}、warnings 按 {songId, message}；两侧共用一个宽容 DTO */
+@Serializable
+data class NeteaseSongMessage(val songId: String, val reason: String = "", val message: String = "")
+
+/** 同步等终态结果：state ∈ done/partial/failed；trackIds 为已入库的曲目 id（可直接播放） */
+@Serializable
+data class NeteaseImportResult(
+  val url: String,
+  val kind: String,
+  val state: String,
+  val total: Int = 0,
+  val imported: Int = 0,
+  val skipped: Int = 0,
+  val failed: Int = 0,
+  val destination: String = "",
+  val trackIds: List<Long> = emptyList(),
+  val files: List<NeteaseFile> = emptyList(),
+  val failures: List<NeteaseSongMessage> = emptyList(),
+  val warnings: List<NeteaseSongMessage> = emptyList(),
+)
+
+/** 导入目标：folders 含 writable（不可写目录前置禁止提交）；children 单层、可能截断 */
+@Serializable
+data class NeteaseFolder(val id: String, val name: String, val path: String, val writable: Boolean = false)
+
+@Serializable
+data class NeteaseChildren(val directories: List<String> = emptyList(), val truncated: Boolean = false)
+
+/** 曲目来源信息（登录可读）：quality 为匿名音源实际档位（如 exhigh） */
+@Serializable
+data class NeteaseInfo(
+  val trackId: String = "",
+  val songId: String = "",
+  val quality: String? = null,
+  val format: String = "mp3",
+  val filename: String = "",
+  val title: String = "",
+  val artist: String = "",
+  val album: String = "",
+  val albumArtist: String? = null,
+  val genre: String? = null,
+  val trackNumber: Int? = null,
+  val discNumber: Int? = null,
+  val hasCover: Boolean = false,
+  val warnings: List<String> = emptyList(),
+)
+
+/** 删除申请票据：reviewPath 为 Web 核对页路径；expiresAt 为 epoch 毫秒（同 YouTube 形状） */
+@Serializable
+data class NeteaseDeletionRequest(
+  val requestId: String = "",
+  val reviewPath: String = "",
+  val expiresAt: Long = 0,
+)
+
+/** 人工核对视图：token 只保存在内存，confirm 时随逐字输入的 filename 一并提交 */
+@Serializable
+data class NeteaseDeletionReview(
+  val trackId: String = "",
+  val title: String = "",
+  val artist: String = "",
+  val filename: String = "",
+  val format: String = "",
+  val path: String = "",
+  val sizeBytes: Long = 0,
+  val expiresAt: Long = 0,
+  val token: String = "",
+)
+
 // ── 音乐助手（docs/08；与 web api/client.ts 同源）─────────
 
 @Serializable
