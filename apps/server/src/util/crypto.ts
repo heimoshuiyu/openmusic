@@ -7,7 +7,7 @@ import { Effect } from "effect"
  * - Subsonic token 认证需要可逆地取回明文密码（token = md5(password + salt)，
  *   无法从任何哈希推导）——与 Navidrome 相同的做法：AES-256-GCM 加密存储，
  *   密钥来自 OPENMUSIC_SECRET 环境变量，缺省时首启生成并落盘 DATA_DIR/secret.key
- *   （见 docs/03 §2.6 的实现修订）
+ *   （见 docs/03 §2.7 的实现修订）
  */
 
 const subtle = () => globalThis.crypto.subtle

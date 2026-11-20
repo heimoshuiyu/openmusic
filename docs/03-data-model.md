@@ -166,7 +166,7 @@ album.track_count / album.duration / artist.album_count 由扫描器维护（`UP
 - 物化计数（`albums.track_count/duration`、`artists.track_count`）为 canonical 口径；已知限制：`most-played?type=track` 仍按物理 id 聚合（跨副本稀释），跨槽位聚合留作后续
 - 已知边界：同专辑同碟**完全同名**的不同录音会被折叠为一个槽位（如两首 Intro）——候选启发式「标题同但 track_no 不同且时长差 >15s 视为不同录音」，待真实样本出现再做
 
-### 2.5 Subsonic 兼容所需字段映射
+### 2.6 Subsonic 兼容所需字段映射
 
 | Subsonic 概念 | 来源 |
 |---|---|
@@ -181,14 +181,14 @@ album.track_count / album.duration / artist.album_count 由扫描器维护（`UP
 
 `0010-library-albums.sql` 将可浏览专辑与内部身份分离：`library_albums` 根据 `EXISTS (tracks.album_id = albums.id)` 决定可见性，包含所有物理版本及 CUE 分轨，不依赖缓存计数和专辑名。具有播放历史、收藏或评分的空专辑仍保留在 `albums`；同一自然键重新入库时可沿用原 ID。
 
-### 2.6 Subsonic token 认证的密码兼容
+### 2.7 Subsonic token 认证的密码兼容
 
 Subsonic token = `md5(password + salt)`。argon2 哈希无法验证该式，故 `users.subsonic_token_seed` 存 `hex(md5(password))`：
 - token 模式验证：`md5(seed_bytes + salt) == t`（seed 以 hex 存，比对时按字节拼接，与 enc:hex 密码语义一致）
 - hex/明文模式：先验证明文（argon2 verify）成功后即可直接比对
 - 该列与 argon2 哈希同事务更新（改密时）
 
-### 2.7 播放事件与收听时长（plays）
+### 2.8 播放事件与收听时长（plays）
 
 - **append-only 事件表（不可变事实日志，0003 起）**：一行 = 一次通过客户端有效性判定（>50% 或 >4min）的播放；不在 tracks 上物化 play_count，读路径聚合（§2.2）
 - `listened_seconds` 可空：第一方客户端上报实测收听秒数（Web 端取阈值触发瞬间的 `audio.currentTime`）；**null = 未知**（Subsonic scrobble 协议无此字段），统计时 `coalesce(listened_seconds, duration_seconds)` 按快照时长估算
@@ -200,7 +200,7 @@ Subsonic token = `md5(password + salt)`。argon2 哈希无法验证该式，故 
 - most-played 归因：track 聚合 `p.track_id`（滤墓碑）；album/artist 直接聚合快照列 `p.album_id` / `p.artist_id`（无 join，身份稳定）
 - **most-played album/artist 型排除兜底身份**（`Unknown Album` / `Unknown Artist`，常量在 `@openmusic/shared`）：散文件聚合体没有专辑/艺人语义，进榜即统计噪音（AI 统计数据基底的污染源）；排除在 SQL 侧做（top-N 不空缺）。track 型与 `summary` 不排——曲目是真实文件、收听时长是真实事实
 
-### 2.8 CUE 整轨虚拟分轨（0004）
+### 2.9 CUE 整轨虚拟分轨（0004）
 
 整轨抓轨（单 FLAC/APE/WAV 镜像 + cue 分段表）以**虚拟曲目**形态入库：一行 =
 镜像内一个 `[offset_ms, offset_ms + duration)` 分段，对 API/Subsonic/三端播放器
@@ -219,16 +219,29 @@ Subsonic token = `md5(password + salt)`。argon2 哈希无法验证该式，故 
   O(1)），输出侧 `-t` 卡分段终点（客户端 ended 语义天然正确）；物理载体 =
   剥掉 `#NNN` 后缀的真实镜像路径（流/下载/封面提取同源）
 - **统计**：打点/最常播放/专辑物化计数全部按虚拟行身份——古典分乐章的听感
-  统计天然正确；`plays` 快照同 §2.7
+  统计天然正确；`plays` 快照同 §2.8
 - **消费面注意**：路径消费点（Subsonic folder browsing 的 path 属性、封面采样、
   目录统计）一律先剥 `#\d+$` 后缀再用
 - **不做**：cue 内嵌 REPLAYGAIN/ISRC、混合模式（同专辑虚拟+物理混排）——
   单镜像要么整虚拟要么整物理
 
-### 2.9 P2 预留
+### 2.10 后续迁移新增的表（0007–0012）
+
+MVP 之后的迁移各自带走了新的表/视图，设计动机见对应文档：
+
+| 迁移 | 对象 | 用途 |
+|---|---|---|
+| 0007 | `agent_sessions` | AI 助手会话归属（多用户咽喉，docs/08） |
+| 0008 | `youtube_imports` | YouTube 导入源与物理版本（docs/04 导入组端点） |
+| 0009 | `library_exclusions`（表） | 显式移除压过增量/强制扫描：同路径不再因目录还在盘上而被扫回 |
+| 0010 | `library_albums`（视图） | 专辑身份与可见性分离：只有存在真实曲目引用的专辑可浏览（含 CUE 行） |
+| 0011 | `track_metadata_overrides` | 显式导入元数据：独立于文件标签、按物理版本持久化（docs/04） |
+| 0012 | `lyric_documents` / `track_lyrics` | 歌词正文（digest 去重、不可变）+ 每曲目绑定（saved/file/none 三态） |
+
+### 2.11 P2 预留
 
 - `tracks.embedding vector(768)`（pgvector，AI 搜索）
-- `radio_stations`、`shares`、`bookmarks`、`lyrics` 表在对应里程碑再加，不在 MVP 迁移中预建
+- `radio_stations`、`shares`、`bookmarks` 表在对应里程碑再加，不预建
 
 ## 3. 索引清单（MVP）
 
@@ -254,7 +267,7 @@ CREATE UNIQUE INDEX tracks_folder_path_idx ON tracks (music_folder_id, path);
 
 ## 4. 删除语义
 
-- 删除 track：级联清 playlist_tracks；annotations(item_type='track') 由扫描孤儿清理；**plays 不删**（0003 起 `SET NULL` 留墓碑，见 §2.7）
+- 删除 track：级联清 playlist_tracks；annotations(item_type='track') 由扫描孤儿清理；**plays 不删**（0003 起 `SET NULL` 留墓碑，见 §2.8）
 - 删除 album/artist：仅由扫描器在孤儿检测时执行（无引用才删）
 - 删除 user：级联删 sessions/playlists/annotations/plays/play_queues
 - 删除 playlist：级联 playlist_tracks

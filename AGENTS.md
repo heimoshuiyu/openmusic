@@ -47,7 +47,7 @@ bun run test:coverage          # 覆盖率（lcov → coverage/）
 # 集成测试前置（一次性）：
 podman compose up -d db
 podman exec openmusic-db createdb -U openmusic openmusic_test 2>/dev/null || true
-bun run check                  # tsc + lint
+bun run check                  # tsc --noEmit（apps/server + apps/web）
 
 # 如需访问代理，请在本地环境中配置，不提交供应商凭据或内网端点。
 ```
@@ -95,7 +95,7 @@ packages/shared/   # 前后端共享的 Effect Schema 与常量
 docs/              # 设计文档（决策的事实源）
 ```
 
-依赖方向严格单向：`http → service → repo → db`。禁止 http 直调 repo、service 之间禁止循环依赖。
+依赖方向单向：`http → service/repo → db`。需要编排的领域（认证/扫描/流/歌词/导入/agent）走 service；简单 CRUD 由 http handler 直调 repo。service 之间禁止循环依赖。
 
 # Conventions
 
@@ -163,7 +163,7 @@ docs/              # 设计文档（决策的事实源）
 ## 安卓客户端（apps/android）踩坑与约定
 
 - **技术栈**：Kotlin + Jetpack Compose（BOM 2026.01.00）+ Media3/ExoPlayer 1.8 + OkHttp(cookie 会话) + coil3 + kotlinx-serialization；构建：Gradle 9.4.1（wrapper 已入库）+ **AGP 9.2 内置 Kotlin**（不需要也不允许再 apply `org.jetbrains.kotlin.android`；Compose 编译器插件 `org.jetbrains.kotlin.plugin.compose` 版本须与 AGP 内置 Kotlin 同版，当前 2.3.0）。JDK 21 + SDK 36（`~/Android/Sdk`），minSdk 26 / targetSdk 36；代理放在用户级 Gradle 配置
-- **构建/装机**：`cd apps/android && ./gradlew :app:assembleDebug` → `adb install -r app/build/outputs/apk/debug/app-debug.apk`；USB 调试用 `adb reverse tcp:3000 tcp:3000`（手机 localhost:3000 → 电脑服务器），真机使用自己的服务器地址
+- **构建/装机**：前置——先在仓库根 `bun install`（`preBuild` 会用 bun 构建 web 助手资产打进 APK）。`cd apps/android && ./gradlew :app:assembleDebug` → `adb install -r app/build/outputs/apk/debug/app-debug.apk`；USB 调试用 `adb reverse tcp:3000 tcp:3000`（手机 localhost:3000 → 电脑服务器），真机使用自己的服务器地址
 - **架构**：`OpenMusicApp` 持全局单例（OkHttp + cookieJar + api + coil ImageLoader）；`player/PlaybackService`（MediaSessionService：后台播放/通知栏/锁屏/耳机键）+ `PlayerBus`（进程内 StateFlow，UI 直读状态）+ `PlayerController`（MediaController 通道，UI 命令走它保证与通知栏一致）；`ui/MainScaffold` 底部五个一级页面（主页、资料库、音乐助手、搜索、收藏）+ MiniPlayer + NowPlaying 全屏层；屏幕间动作走 `UiActions` 协议
 - **会话**：`om_session` cookie 由 `PersistentCookieJar`（DataStore 落盘）随所有请求自动携带——API/流/封面共用同一 OkHttpClient；ExoPlayer 用 `OkHttpDataSource.Factory` 共享之
 - **音频流缓存（2026-10-08 起）**：`player/AudioCache` = 进程单例 `SimpleCache`（`cacheDir/audio`，**不设上限** NoOpCacheEvictor——用户决策，磁盘写满由 FLAG_IGNORE_CACHE_ON_ERROR 兜底回源）+ `CacheDataSource` 包在 OkHttp 工厂外层——重播/重听零流量；缓存键 = `<origin>/track/<id>`（纯函数 `streamCacheKey`，转码回退加 `-t`）：换服务器地址不串缓存、原始/转码两份字节流分开存；`SimpleCache` 同目录单实例，服务销毁重建**不得 release**（挂 object 常驻进程）。完整「下载离线」未做
@@ -179,9 +179,9 @@ docs/              # 设计文档（决策的事实源）
 - **Compose 手写图标**：`OmIcons` 用 `addPathNodes("M2 18h1.4...")` 解析 lucide SVG path（`PathParser` 不是公开 API）；stroke/fill 参数要 `SolidColor`（`Brush`），tint 靠 Icon 的 ColorFilter 整体替换
 - tab 导航 `popUpTo(start){saveState}+restoreState` 会**恢复各 tab 的钻入栈**（主页 tab 回来时带着上次钻入的专辑页）——这是预期行为不是 bug
 - Feishin 能力协商由 `getOpenSubsonicExtensions` 通告列表控制——**只通告已实现的扩展**（见 docs/05 §2）
-- Subsonic 认证三模式（token+salt / enc:hex / plain）依赖 `users.subsonic_token_seed`（见 docs/03 §2.6），改密码必须同事务更新该列
+- Subsonic 认证三模式（token+salt / enc:hex / plain）依赖 `users.subsonic_token_seed`（见 docs/03 §2.7），改密码必须同事务更新该列
 - 扫描是单飞的（进行中再触发 → `ScanInProgress` 错误 / Subsonic 返回当前状态）；可 `DELETE /library/scan` 幂等取消（interrupt Fiber，已提交批次保留）；大库扫描要点（unnest 批插/分块删除/艺人清扫看双引用）见 docs/02 §5；**消失清理仅在 walk 零错误的目录上执行**——远程 FS 瞬时读错误（NFS stale handle/SMB 重连）不清库，「看不见」≠「已消失」，可读部分照常索引
-- **plays 是不可变事实日志（0003 墓碑设计，docs/03 §2.7）**：曲目删除 FK `SET NULL` 不级联；打点写全快照（title/artist_name/album_name/duration + `artist_id`/`album_id`——后两者是自然键 upsert 的稳定身份，跨目录重登记不漂移）；唯一写路径 `PlayRepo.record`（第一方 + Subsonic scrobble 共用，别开旁路）。消费面分工：`/plays/recent` 保留墓碑（`track: null` + 快照叙事，三端灰显不可播）；`most-played?type=track` 过滤死行、album/artist 型按快照 id 聚合（无 join）；`summary` 凭快照单调不回退。改这里先读 docs/03 §2.7 的动机段（AI 统计/推荐的数据基底）
+- **plays 是不可变事实日志（0003 墓碑设计，docs/03 §2.8）**：曲目删除 FK `SET NULL` 不级联；打点写全快照（title/artist_name/album_name/duration + `artist_id`/`album_id`——后两者是自然键 upsert 的稳定身份，跨目录重登记不漂移）；唯一写路径 `PlayRepo.record`（第一方 + Subsonic scrobble 共用，别开旁路）。消费面分工：`/plays/recent` 保留墓碑（`track: null` + 快照叙事，三端灰显不可播）；`most-played?type=track` 过滤死行、album/artist 型按快照 id 聚合（无 join）；`summary` 凭快照单调不回退。改这里先读 docs/03 §2.8 的动机段（AI 统计/推荐的数据基底）
 - 转码产物是可再生缓存：可随时删除，LRU 守护进程负责不超 `TRANSCODE_CACHE_MAX_BYTES`
 - **Unknown Artist/Unknown Album 是 scanner 的无标签回退身份**（常量在 `@openmusic/shared`，是数据语义的一部分，改动等于拆散存量聚合）：most-played album/artist 型排除之（track 型与 summary 不排）；文件夹封面不挂 Unknown Album 与跨多目录的专辑；封面回发降级链（文件夹 → 内嵌 → 404）任何一步不得 500
 - **专辑归组推断链（VA 合辑的命门）**：albumartist 标签缺失时按「专辑目录（`util/album-grouping.ts` 剥尾碟号段）+ 专辑名」分组裁决——组内显式 albumartist 众数 → 曲作者唯一者 → `Various Artists`；碟号链 = DISCNUMBER → 父目录末段纯碟号。显式标签不被推断改写，推断只在目录内做。专辑身份与可见性分离：浏览读 `library_albums`；空专辑有播放、收藏或评分则保留原 ID，不按同名重定向（`repo/album-lifecycle.ts`）。
@@ -189,7 +189,7 @@ docs/              # 设计文档（决策的事实源）
 
 ## AI Agent 线（A0–A3，docs/08-ai-agent.md）约定
 
-- **架构**：`service/agent/tools.ts` = music 工具面（12 个 `music_*` 工具，纯 Effect、走既有 repo，口径与浏览面一致）；`agent-service.ts` = Port（身份显式进 Port：非属主与不存在同回 NotFound）；`embedded.ts` 用同一宿主处理聊天与听写。`vendor/opencode/README.md` 记录 fork 的版本与升级流程；SDK 的 Effect 4.1 和 OpenMusic 的 rc.115 只通过 Promise/普通对象交互，不全局覆盖 Effect 版本。
+- **架构**：`service/agent/tools.ts` = music 工具面（13 个 `music_*` 工具，纯 Effect、走既有 repo，口径与浏览面一致）；`agent-service.ts` = Port（身份显式进 Port：非属主与不存在同回 NotFound）；`embedded.ts` 用同一宿主处理聊天与听写。`vendor/opencode/README.md` 记录 fork 的版本与升级流程；SDK 的 Effect 4.1 和 OpenMusic 的 rc.115 只通过 Promise/普通对象交互，不全局覆盖 Effect 版本。
 - **隔离**：宿主会话/凭据库 = `data/agent-sessions.db`（专用 sqlite，不与宿主机 OpenCode 共库）；`config.directory` 指专用 agent-home，`config.file` 指独立 JSONC（管理页可写），`project:false` 禁止仓库配置发现。Location = `data/agent-workspace`（scratch，绝不指向仓库或 `/data`）；不得将 SDK 配置、原始 provider/model 或凭据对象返回给浏览器。
 - **多用户咽喉**：PG `agent_sessions` 表记归属（0007）；工具执行期用 `sessionID` 反查 owner（工具上下文只有 sessionID）；music agent 权限 deny edit/bash/shell/write（config `agents` 字段定义——AgentEditor 没有 add）
 - **OpenCode 工具的调用面由 `options.codemode` 二分**（core/tool.ts 实证）：`codemode: false` = 直接 `tool_calls`（进请求 tools 数组 + 执行器注册表）；**不设或 true = Code Mode**（只出现在 execute 沙盒目录，直接调用会 "No tool named"）。music 工具现为 **Code Mode（用户决策）**：内层调用无独立 tool.success 事件，状态经 `session.tool.progress` 的 `metadata.toolCalls` 累积上报；play_now/enqueue 的确认卡片靠服务端自产 `client-action` 事件。SSE 经 `event-bridge.ts` 按已核验属主多播，禁止直接把宿主流或全局 PubSub 暴露给客户端。

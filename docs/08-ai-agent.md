@@ -1,7 +1,7 @@
 # OpenMusic 设计文档 —— AI Agent 集成（A 线）
 
 > 状态：设计稿（2026-09-19，待用户确认后实施）
-> 关联：docs/01 §6.3（AI 搜索扩展点）、docs/03 §2.7（plays 事实日志 = AI 数据基底）、docs/06 P2（语义搜索）。
+> 关联：docs/01 §6.3（AI 搜索扩展点）、docs/03 §2.8（plays 事实日志 = AI 数据基底）、docs/06 P2（语义搜索）。
 > 上游事实源：OpenCode V2 文档（opencode.ai/v2/docs/build/sdk 等）+ vendored 源码包说明（`vendor/opencode/README.md`）。
 
 ## 1. 定位：什么叫「AI-native 的 OpenMusic」
@@ -10,7 +10,7 @@
 
 1. **域层长出工具面（tool surface）**：曲库浏览/搜索/队列/播放列表/收听史这些既有 service 能力，以带 JSON Schema 输入、带描述的工具形式二次暴露——任何 agent 运行时（OpenCode、未来别的）都能直接消费。工具面是第一公民，与 REST API 平级。
 2. **Agent 运行时可插拔**：OpenMusic 自己不实现 agent 循环（工具调用、流式、上下文压缩、provider 抽象、权限），内嵌 OpenCode 宿主获得全部能力；`AgentService` 是一个 Port，未来换实现不动域层。
-3. **数据基底变现**：docs/03 §2.7 设计的 plays 不可变事实日志，从第一天起就是 agent 的取数面（收听画像注入、推荐理由可解释）。P2 的 pgvector 语义搜索落地后作为工具接入，而非独立功能。
+3. **数据基底变现**：docs/03 §2.8 设计的 plays 不可变事实日志，从第一天起就是 agent 的取数面（收听画像注入、推荐理由可解释）。P2 的 pgvector 语义搜索落地后作为工具接入，而非独立功能。
 
 **非目标**：不给 agent 开放文件系统写能力；不让 agent 直接跑 SQL；TUI 端暂不接入。Android 助手见 `apps/android/.../agent/AssistantSurface.kt` 和 `AssistantBridge.kt`。
 
@@ -165,7 +165,7 @@ Web / Android 0.1.13 的听写走 `POST /api/v1/agent/sessions/:id/transcribe`�
 
 追加决策（2026-09-19，A3）：
 
-4. ~~**A3 = pgvector 语义检索**~~ → **否决**（用户决策）：不引入 embedding——不做向量回填任务、不换 db 镜像、不加 embedding API key、检索期零外部调用。「语义理解」上移给会话中的 LLM（多语言翻译 + 关键词变体规划本来就是它的强项），DB 侧只补结构化检索面（facets/过滤）与事实数据面（plays 画像）。docs/03 §2.9 的 `embedding` 列预留保留不动，将来想做随时可加（与现方案不互斥）；
+4. ~~**A3 = pgvector 语义检索**~~ → **否决**（用户决策）：不引入 embedding——不做向量回填任务、不换 db 镜像、不加 embedding API key、检索期零外部调用。「语义理解」上移给会话中的 LLM（多语言翻译 + 关键词变体规划本来就是它的强项），DB 侧只补结构化检索面（facets/过滤）与事实数据面（plays 画像）。docs/03 §2.11 的 `embedding` 列预留保留不动，将来想做随时可加（与现方案不互斥）；
 5. **动态上下文一律走 instruction 槽位，禁止动态 system 注入**（用户决策，缓存纪律）：OpenCode 的 instruction 机制 = 会话级 key→JSON 槽位（宿主 sqlite，按会话隔离）+ 内容 hash diff——**值没变 delta 为空（零 token、前缀缓存无损）；变了只追加一条 "changed and supersedes" 增量块，system 前缀永不重写**。SDK 面：`host.sessions.instructions.entry.put/remove`（HTTP 面 `/api/experimental/session/:id/instructions/entries/:key`）。画像（`listening-profile` 键）在 prompt 前同步 put；**画像内容必须 hash 稳定**（键名固定/数组定长上限/不含绝对时间戳——见 PlayRepo.profile 注释），口味没变就零成本；
 6. ~~**`music_recommend` 工具**~~ → **否决**（用户决策）：不提供推荐接口——推荐是 agent 自己的推理过程，平台提供探索原料（facets/过滤搜索/播放数据），方法论用 **skill** 教（`agent-home/skills/music-exploration/SKILL.md`，config directory 下自动发现 + Watcher 热刷新，seed 只在文件不存在时写、手改不冲）；
 7. **skill 正文懒加载**：上下文里只有 name+description（稳定，缓存友好），模型按需调 skill 工具读正文——探索方法论的迭代不产生缓存代价。

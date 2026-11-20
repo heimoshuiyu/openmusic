@@ -151,8 +151,8 @@ export interface PlayStatRow {
 }
 
 export const PlayRepo = {
-  /** 落库一次播放；10 秒窗口去重（docs/03 §2.7），返回是否真的插入。
-   *  打点即快照：曲目死掉后叙事与统计身份都留在事件行上（docs/03 §2.7 墓碑设计）；
+  /** 落库一次播放；10 秒窗口去重（docs/03 §2.8），返回是否真的插入。
+   *  打点即快照：曲目死掉后叙事与统计身份都留在事件行上（docs/03 §2.8 墓碑设计）；
    *  from 双 join 使无效 trackId 不落行（返回 false，不触发 FK 违例） */
   record: (userId: number, trackId: number, playedAt: Date, listenedSeconds?: number | undefined) =>
     Effect.map(
@@ -207,7 +207,7 @@ export const PlayRepo = {
         })),
     ),
 
-  /** 最常播放（docs/04 §2.8）：count 降序，并列时最近听过的在前；归因见 docs/03 §2.7。
+  /** 最常播放（docs/04 §2.8）：count 降序，并列时最近听过的在前；归因见 docs/03 §2.8。
    *  分组键直接用事件行快照：artist_id/album_id 是自然键 upsert 的稳定身份，
    *  不随曲目生死/目录重登记漂移；track 型过滤墓碑（导航面不显示死行）。
    *  album/artist 型排除兜底身份（Unknown Album/Unknown Artist）：散文件聚合体没有

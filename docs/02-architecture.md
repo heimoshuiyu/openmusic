@@ -36,34 +36,35 @@ openmusic/
 │   │       ├── main.ts            # 入口：组装 Layer，启动
 │   │       ├── config.ts          # 环境变量 → Effect Config
 │   │       ├── db/
-│   │       │   ├── migrations/    # NN-name.sql 迁移文件
-│   │       │   └── sql.ts         # @effect/sql-pg Layer + 常用语句 helper
+│   │       │   ├── migrations/    # NN-name.sql 迁移文件（只增不改历史）
+│   │       │   ├── pg.ts          # @effect/sql-pg Layer
+│   │       │   └── migrator.ts   # 启动时逐文件迁移
 │   │       ├── domain/            # 域 Schema（Effect Schema）与错误定义
-│   │       ├── repo/              # 数据访问层（手写 SQL）
-│   │       ├── service/           # 业务 Service（Context.Tag + Layer）
-│   │       │   ├── auth.ts        # 会话/用户
-│   │       │   ├── scanner.ts     # 扫描
-│   │       │   ├── stream.ts      # 流/转码/缓存
-│   │       │   ├── playlist.ts
-│   │       │   ├── annotation.ts  # 收藏/评分
-│   │       │   ├── scrobble.ts
-│   │       │   └── search.ts
+│   │       ├── repo/              # 数据访问层（手写 SQL：users/music-folders/browse/search/
+│   │       │                      # playlists/annotations(含 plays)/subsonic/agent-sessions/
+│   │       │                      # album-lifecycle/library-exclusions/metadata-overrides）
+│   │       ├── service/           # 业务 Service（Context.Tag + Layer），只承载需要编排的领域
+│   │       │   ├── auth.ts        # 会话/用户/首启引导/Subsonic 凭据加密
+│   │       │   ├── scanner.ts    # 扫描/封面/专辑归组
+│   │       │   ├── stream.ts     # 流/转码/封面回发
+│   │       │   ├── lyrics.ts / lyrics-mcp.ts   # 歌词 sidecar+内嵌读取、agent 歌词工具
+│   │       │   ├── youtube/      # 导入：downloader/metadata/captions/removals/mcp
+│   │       │   └── agent/         # 内嵌 AI 助手：tools/agent-service/embedded/voice
 │   │       ├── http/
-│   │       │   ├── api/           # /api/v1 HttpApi：group + handler
+│   │       │   ├── api/           # /api/v1 HttpApi：group + handler + schema
 │   │       │   ├── subsonic/      # /rest/*view HttpRouter + XML/JSON 序列化
+│   │       │   ├── media.ts / static.ts / agent-events.ts / agent-voice.ts   # 低层路由
 │   │       │   └── middleware/    # 会话认证等
 │   │       └── util/
-│   ├── web/               # React SPA
-│   │   └── src/
-│   │       ├── api/               # 基于 @tanstack-query 的 typed client
-│   │       ├── routes/            # TanStack Router 文件路由
-│   │       ├── player/            # 播放器状态（zustand）+ audio 元素管理
-│   │       └── components/
+│   ├── web/               # React SPA（src：api/ routes/ player/ components/ + android-assistant/）
+│   ├── tui/               # 终端客户端（@opentui/react + 原生 audio）
+│   └── android/           # 安卓客户端（Kotlin + Compose + Media3）
 ├── packages/
 │   └── shared/            # 前后端共享的 Effect Schema 与常量
 ├── docs/                  # 本设计文档
 ├── compose.yaml           # postgres（+ 可选 app）
-├── Containerfile          # app 镜像（P1 完善化）
+├── Containerfile          # app 镜像（两阶段：web build + 运行时）
+├── vendor/opencode/       # vendored OpenCode SDK tgz（AI 助手线，docs/08）
 └── AGENTS.md
 ```
 
@@ -99,15 +100,16 @@ Layer.provideMerge(ServicesLayer, Pg) // repo → service 依赖注入
 
 ### 3.3 关键 Service 职责
 
+Service 层只承载**需要编排的领域**；简单 CRUD 由 `/api/v1` handler 直调 repo（无 service 中转）。搜索、收藏/评分、播放列表、播放上报（原设计稿里的 Search/Annotation/Playlist/Scrobble Service）实际落在 repo 层（`search` / `annotations`（含 `PlayRepo`）/ `playlists`），由 handler 直调。
+
 | Service | 职责 | 关键点 |
 |---------|------|--------|
-| `AuthService` | 登录/登出、会话（HttpOnly Cookie + DB sessions 表）、`Bun.password`（argon2）哈希 | 会话滑动过期 30 天 |
-| `ScannerService` | 手动触发扫描；单飞（同一时刻仅一个任务）；状态机与进度 | 见 5 |
-| `StreamService` | 直传 / 转码 / 封面字节流；Range 请求；转码缓存 LRU | 见 6 |
-| `SearchService` | trigram 搜索（artist/album/track 三路召回 + 聚合分页） | P2 挂接 AI 召回 |
-| `AnnotationService` | 收藏 / 取消收藏 / 评分（按用户隔离） | |
-| `PlaylistService` | 播放列表 CRUD + 顺序管理 | |
-| `ScrobbleService` | 上报播放（含 now-playing 非持久队列）、播放历史、最常播放 | 阈值规则见 04 文档 |
+| `auth.ts` | 登录/登出、会话（HttpOnly Cookie + DB sessions 表）、首启引导、Subsonic 凭据加密 | `Bun.password`（argon2）；会话滑动过期 30 天 |
+| `scanner.ts` | 手动触发扫描；单飞（同一时刻仅一个任务）；状态机与进度 | 见 5 |
+| `stream.ts` | 直传 / 转码 / 封面字节流；Range 请求；转码缓存 LRU | 见 6 |
+| `lyrics.ts` / `lyrics-mcp.ts` | 歌词 sidecar 与内嵌标签读取、绑定/编辑；agent 歌词工具 | docs/04 歌词组 |
+| `youtube/` | yt-dlp 下载、标签写入、字幕导入、物理删除票据 | docs/04 导入组 |
+| `agent/` | 内嵌 AI 助手宿主、music 工具面、SSE/听写 | docs/08 |
 
 ### 3.4 错误模型
 
@@ -154,7 +156,7 @@ Layer.provideMerge(ServicesLayer, Pg) // repo → service 依赖注入
    —— 读失败（根不可达=挂载断开/目录被删、子目录 readdir 失败、单文件 stat
       失败）只记错误并跳过该子树/文件，不中止 walk：**「看不见」≠「已消失」**，
       远程 FS（NFS/SMB/sshfs）扫描数小时里一次瞬时读错误很平常
-2. CUE 配对 → 虚拟分轨计划（docs/03 §2.8）：cue FILE 按「同目录 + 文件名
+2. CUE 配对 → 虚拟分轨计划（docs/03 §2.9）：cue FILE 按「同目录 + 文件名
    （大小写不敏感）」匹配 walk 收集的音频文件；**同一镜像被 ≥2 轨引用才虚拟化**
    （每 FILE 恰一轨 = 分轨自带 cue → 物理索引，防同内容双份）；引用的镜像不在库
    （分轨 rip 保留 cue 的典型形态）→ 整节跳过；分段边界不可信（INDEX 缺失/乱序）
@@ -183,8 +185,8 @@ Layer.provideMerge(ServicesLayer, Pg) // repo → service 依赖注入
    → upsert 用 unnest 多行语句（artists/albums/tracks 各一条，批内按冲突键
      与路径双重去重；可空列/大数列以 PgTypes.array 显式定型——逐元素推断 OID
      对全 null 数组与 int4/int8 混装会直接抛错）
-   → album/artist 快照身份见 docs/03 §2.7；虚拟行 = 镜像解析一次 + cue
-     分段展开 N 行（docs/03 §2.8）
+   → album/artist 快照身份见 docs/03 §2.8；虚拟行 = 镜像解析一次 + cue
+     分段展开 N 行（docs/03 §2.9）
    → 碟号链：标签 DISCNUMBER → 父目录名末段是纯碟号（`Disc 1`/`CD-2`/`cd3`，
      util/album-grouping.ts 的 DISC_DIR_RE，只认整段——Discography 不误伤）
      → 1。目录分碟（`ReStart-F/Disc 1|2/`）是标签缺失时唯一可靠的真相源
@@ -246,7 +248,7 @@ Android 离线单曲循环（0.1.10）：固定文件的 200 和 206 响应须�
 - `GET /api/v1/tracks/:id/stream?format=&maxBitRate=`
   - `format=raw` 或参数缺省且原格式浏览器可播 → **直传文件**，支持 Range（Bun.file 天然支持）
   - 否则 → 转码
-  - **CUE 虚拟曲**（is_virtual，docs/03 §2.8）恒经 ffmpeg：实际起点 =
+  - **CUE 虚拟曲**（is_virtual，docs/03 §2.9）恒经 ffmpeg：实际起点 =
     `offset_ms/1000 + timeOffset`（输入端 -ss，O(1)），输出侧 `-t` 卡分段终点
     （流在边界自然 EOF，客户端 seek/ended/进度语义与普通曲完全一致）；
     物理镜像不存在于磁盘上的合成路径——流/下载一律落到剥后缀的真实文件
@@ -303,6 +305,8 @@ cacheKey = sha256(trackId + format + maxBitRate + 音频指纹参数)
 | `COVERS_CACHE_MAX_BYTES` | `536870912`（512MiB） | 封面缓存上限（与转码缓存共用淘汰器，docs/02 §6.2） |
 | `TRANSCODE_MAX_CONCURRENCY` | `4` | 并发转码上限 |
 | `LOG_LEVEL` | `info` | |
+| `SERVER_IDLE_TIMEOUT` | `0`（禁用） | Bun.serve 空闲连接超时秒数；默认禁用——流式播放依赖长连接（docs/07 §7 冻住坑） |
+| `OPENMUSIC_TAG_PYTHON` | `python3` | YouTube 导入写标签的解释器（需可 import mutagen；容器内已指向 yt-dlp venv，裸机开发需自备） |
 | `OPENMUSIC_ADMIN_USER` / `OPENMUSIC_ADMIN_PASSWORD` | — | 首次启动且无用户时创建管理员；密码缺省则生成随机密码并打印一次 |
 | `MUSIC_FOLDERS` | — | 首启种子（逗号分隔绝对路径）；music_folder 表为主，此后以 API 管理为准 |
 | `OPENMUSIC_SECRET` | — | Subsonic 凭据加密密钥（≥16 字符）；缺省首启生成 `DATA_DIR/secret.key`（后果见 docs/07 §3） |
@@ -313,7 +317,7 @@ cacheKey = sha256(trackId + format + maxBitRate + 音频指纹参数)
 ### 8.1 Dev
 
 ```bash
-podman compose up -d db        # postgres:17-alpine, 端口 5432
+podman compose up -d db        # postgres:17-alpine，compose 映射宿主 127.0.0.1:5433 → 容器 5432
 bun install
 bun run --filter @openmusic/server dev   # :3000，watch 模式
 bun run --filter @openmusic/web dev      # :5175，proxy /api /rest → :3000

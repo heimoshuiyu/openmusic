@@ -4,7 +4,7 @@ Base path：`/api/v1`。实现载体：`@effect/platform` **HttpApi DSL**（Effe
 
 ## 1. 通用约定
 
-- **格式**：JSON（UTF-8）。错误响应统一 `{"error": {"code": "track_not_found", "message": "..."}}`，HTTP 状态码语义化（401/403/404/409/422/500）
+- **格式**：JSON（UTF-8）。`/api/v1/*` 的错误体是带标签的结构化对象（Effect HttpApi typed error 序列化）：404 `{"_tag":"NotFound","entity":"playlist","id":"9"}`、403 `{"_tag":"Forbidden","message":"not owner"}`、401 `{"_tag":"Unauthorized","message":"no session"}`；各端点的具体形状以运行时 `/api/docs`（OpenAPI）为准。参数/负载解码失败由框架统一回 400；语义非法（handler 抛 `BadRequest`）为 422。media/SSE 等手写低层路由例外，使用 `{"error":{"code":…,"message":…}}` 形状。HTTP 状态码语义化（401/403/404/409/422/500）
 - **认证**：`om_session` HttpOnly Cookie（见 02-architecture §4.1）。除 `/auth/login`、`/system/*` 外全部需要登录
 - **权限**：`admin` 角色标注 🔒；普通用户只能操作自己的收藏/播放列表/记录，浏览曲库全员可用
 - **分页**：`?limit=20&offset=0`（limit ≤ 500），响应统一 `{ items: T[], total: number, offset, limit }`
@@ -123,22 +123,22 @@ P2：同一端点增加 `mode=semantic`（pgvector 召回），形状不变。
 | Method | Path | 说明 |
 |--------|------|------|
 | POST | `/plays/:trackId` | 上报一次播放；payload `{listenedSeconds?: int}` 为客户端**实测收听秒数**（缺省/未知不传，存 null，统计按曲目时长兜底）。now-playing 不持久，MVP 由前端本地展示 |
-| GET | `/plays/recent?limit=20&offset=20` | 自己的逐次播放记录；返回数组。`limit` 默认 50，`offset` 默认 0；越过末尾返回 `[]`。条目 `{track, title, artistName, albumName, durationSeconds, playedAt}`；`track: null` 表示已不在库，保留打点快照（docs/03 §2.7）。 |
+| GET | `/plays/recent?limit=20&offset=20` | 自己的逐次播放记录；返回数组。`limit` 默认 50，`offset` 默认 0；越过末尾返回 `[]`。条目 `{track, title, artistName, albumName, durationSeconds, playedAt}`；`track: null` 表示已不在库，保留打点快照（docs/03 §2.8）。 |
 | GET | `/plays/recent?distinct=track&limit=20&offset=20` | 每个物理曲目 ID 只取最近一次，按播放时间倒序（同时间按播放记录 ID 倒序），再跳过前 20 首取下一页。不同版本不按歌名合并；已删除曲目沿用曲名、艺人、专辑、时长快照去重。每次请求读取当前历史，期间新增播放会使偏移位置移动。 |
-| GET | `/plays/most-played?type=track\|album\|artist&period=all\|month\|year&limit=` | 自己的最常播放；返回带 `kind` 标签的联合条目（track/album/artist 摘要 + playCount + listenedSeconds）；track 型过滤墓碑行；album/artist 型排除兜底身份（Unknown Album/Unknown Artist，见 docs/03 §2.7）；归因见 docs/03 §2.7 |
+| GET | `/plays/most-played?type=track\|album\|artist&period=all\|month\|year&limit=` | 自己的最常播放；返回带 `kind` 标签的联合条目（track/album/artist 摘要 + playCount + listenedSeconds）；track 型过滤墓碑行；album/artist 型排除兜底身份（Unknown Album/Unknown Artist，见 docs/03 §2.8）；归因见 docs/03 §2.8 |
 | GET | `/plays/summary` | 听歌汇总（自己）：`{plays, tracks, listenedSeconds}`（listened_seconds 为 null 的按事件行快照时长估算；曲目删除不回退） |
 
-Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规则：>50% 或 >4 分钟才发 submission），服务端不重复判定，只去重：以本次播放时间为中心 ±10 秒内同曲目重复上报不落库（写入处 guard，见 docs/03 §2.7）。
+Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规则：>50% 或 >4 分钟才发 submission），服务端不重复判定，只去重：以本次播放时间为中心 ±10 秒内同曲目重复上报不落库（写入处 guard，见 docs/03 §2.8）。
 
 ### 2.9 media
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET | `/tracks/:id/stream?format=&maxBitRate=&timeOffset=` | 音频流（直传含 Range；转码规则见 02 §6），`Accept-Ranges` 对直传生效；`timeOffset`（秒）= 断点续播：ffmpeg 输入端 seek，raw 走流拷贝（mp3/flac/aac/vorbis/opus/wav，其余转码 mp3 兜底），不读不写转码缓存、忽略 Range。**CUE 虚拟曲**（is_virtual，docs/03 §2.8）恒经 ffmpeg：实际起点 = `offset_ms/1000 + timeOffset`，输出侧 `-t` 卡分段终点（客户端 seek/ended 语义与普通曲完全一致） |
+| GET | `/tracks/:id/stream?format=&maxBitRate=&timeOffset=` | 音频流（直传含 Range；转码规则见 02 §6），`Accept-Ranges` 对直传生效；`timeOffset`（秒）= 断点续播：ffmpeg 输入端 seek，raw 走流拷贝（mp3/flac/aac/vorbis/opus/wav，其余转码 mp3 兜底），不读不写转码缓存、忽略 Range。**CUE 虚拟曲**（is_virtual，docs/03 §2.9）恒经 ffmpeg：实际起点 = `offset_ms/1000 + timeOffset`，输出侧 `-t` 卡分段终点（客户端 seek/ended 语义与普通曲完全一致） |
 | GET | `/tracks/:id/download` | 原文件直传，`Content-Disposition: attachment` |
 | GET | `/covers/:id` | 封面图；id 形如 `al-9` / `ar-1` / `pl-3`；`?size=`（P1 缩放，MVP 原图 + Cache-Control 长缓存，ETag = cover 指纹） |
 
-流端点响应头：`Content-Type`、`Content-Duration`（秒，自定义头供前端显示）、直传时 `Content-Length` + `Accept-Ranges: bytes`；转码时 chunked。
+流端点响应头：`Content-Type`；直传时 `Content-Length` + `Accept-Ranges: bytes`；转码时 chunked。不设自定义时长头——播放时长走 API 元数据的 `durationSeconds`。
 
 ### 2.10 system
 
@@ -151,7 +151,7 @@ Scrobble 有效性由**客户端**判断（Feishin/Subsonic 客户端已有规�
 
 `/admin/agent/*` 另需管理员身份（401/403/未启用 503）。`GET /admin/agent/settings` 返回当前 music 模型、可选模型、供应商连接摘要；`POST /admin/agent/settings` 接受 `model`、`custom`、`key`、`activate`、`disconnect` 五种受限操作，不接受任意 SDK 配置。`POST /admin/agent/console` 发起官方设备授权，`GET` / `DELETE /admin/agent/console/:id` 查询/取消。模型接入凭据不进入响应或会话 SSE。
 
-`AGENT_ENABLED=false`（默认）时全部端点 503。会话归属：`agent_sessions` 表（docs/03 §2.9），非属主与不存在同回 404。
+`AGENT_ENABLED=false`（默认）时全部端点 503。会话归属：`agent_sessions` 表（docs/03 §2.10），非属主与不存在同回 404。
 
 | Method | Path | 说明 |
 |--------|------|------|

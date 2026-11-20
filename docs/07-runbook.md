@@ -45,7 +45,7 @@ podman compose up -d --build    # db + app（:3000，内嵌前端构建产物）
 ### 停止
 
 ```bash
-pkill -f "server/src/main[.]ts"   # 后端（注意：模式里别含 "bun apps/server" 字样，会误杀自己的 shell）
+pkill -f "watch src/main[.]ts"   # 后端：bun run dev 的实际进程 cmdline 是 `bun --watch src/main.ts`（apps/server 目录内起）；模式里别含 "bun apps/server" 字样，会误杀自己的 shell
 podman compose stop db            # 数据库（数据保留）
 ```
 
@@ -53,13 +53,13 @@ podman compose stop db            # 数据库（数据保留）
 
 | 用途 | 来源 | 说明 |
 |---|---|---|
-| 管理员 | `OPENMUSIC_ADMIN_*` | 仅在空库时创建；修改环境变量不会给已有账号改密 |
+| 管理员 | `OPENMUSIC_ADMIN_*` | 仅在空库时创建；修改环境变量不会给已有账号改密；`OPENMUSIC_ADMIN_PASSWORD` 设了但短于 6 位会被忽略并改用随机密码（随机密码打印在启动日志，仅一次） |
 | 集成测试 | `OPENMUSIC_TEST_DB_URL` | 独立的临时测试库，测试账号与真实账号分开 |
 | Feishin 接入 | 本人的 OpenMusic 用户名与密码 | 使用部署者提供的服务地址 |
 
 **生产部署必须**：设 `OPENMUSIC_ADMIN_PASSWORD` 为强密码（或首启后立即改密），并配置反代/TLS。
 
-密码存储机制（见 docs/03 §2.6）：
+密码存储机制（见 docs/03 §2.7）：
 - 第一方登录：argon2 哈希（`Bun.password`）
 - Subsonic token 认证：需要可逆取回明文 → AES-256-GCM 密文存 `users.subsonic_token_seed`
 - 加密密钥：环境变量 `OPENMUSIC_SECRET`（≥16 字符），缺省首启生成 `DATA_DIR/secret.key`
@@ -93,7 +93,9 @@ bun run test:coverage    # lcov → coverage/
 ```bash
 # 备份
 podman exec openmusic-db pg_dump -U openmusic openmusic > backup-$(date +%F).sql
-tar czf data-$(date +%F).tgz ./data        # secret.key + 封面（必须）
+tar czf data-$(date +%F).tgz ./data        # secret.key + 封面（必须）——dev 布局
+# 生产（compose）：DATA_DIR 在 openmusic-data 卷内，不能直接 tar 宿主目录
+podman exec openmusic-app tar czf - -C /data . > data-$(date +%F).tgz
 
 # 恢复
 cat backup-2026-09-15.sql | podman exec -i openmusic-db psql -U openmusic openmusic
@@ -128,3 +130,4 @@ cat backup-2026-09-15.sql | podman exec -i openmusic-db psql -U openmusic openmu
 | `docs/05-subsonic-compat.md` | Feishin 调研 + 兼容层规范 + 验收清单 |
 | `docs/06-roadmap.md` | 里程碑状态（M0–M4 ✅）与 P1/P2 |
 | `docs/07-runbook.md` | 本文 |
+| `docs/08-ai-agent.md` | AI 音乐助手：vendored OpenCode SDK 集成、music 工具面、听写 |

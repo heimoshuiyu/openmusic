@@ -48,7 +48,7 @@
 
 | 模式 | 参数 | 验证 |
 |------|------|------|
-| token | `u`,`t`,`s` | 取用户 `subsonic_token_seed`（= hex(md5(password))，见 03 §2.6）→ `md5(seedBytes ++ salt) == t` |
+| token | `u`,`t`,`s` | 取用户 `subsonic_token_seed`（= hex(md5(password))，见 03 §2.7）→ `md5(seedBytes ++ salt) == t` |
 | hex | `u`,`p=enc:<hex>` | hex 解码得 md5(password)，与 seed 比对 |
 | plain | `u`,`p=<plain>` | `Bun.password.verify`（argon2） |
 
@@ -90,12 +90,12 @@
 | `getSimilarSongs(2)` | "相似播放" | 同艺人随机 + 同流派随机补足 count |
 | `getPlaylists` | 播放列表列表 | 自己的 + public |
 | `getPlaylist` | 播放列表详情（含曲目） | |
-| `createPlaylist` | 新建 / 整体替换 | `playlistId` 缺省=新建；带 songId=全量替换 |
-| `updatePlaylist` | 增删改 | name/comment/public/songIdToAdd/songIndexToRemove |
-| `deletePlaylist` | 删除 | |
+| `createPlaylist` | 新建 / 整体替换 | `playlistId` 缺省=新建；带 songId=全量替换。仅限本人列表（非属主回 code 50） |
+| `updatePlaylist` | 增删改 | name/comment/public/songIdToAdd/songIndexToRemove；仅限本人列表（非属主回 code 50） |
+| `deletePlaylist` | 删除 | 仅限本人列表（非属主回 code 50） |
 | `star` / `unstar` | 收藏切换 | id/albumId/artistId 三类参数 |
 | `setRating` | 评分 | id + rating 0-5 |
-| `scrobble` | 播放上报 | id + time?（规范为**毫秒**，兼容秒值）；`submission=false` 仅记 now-playing（MVP 内存）；10s 去重见 docs/03 §2.7 |
+| `scrobble` | 播放上报 | id + time?（规范为**毫秒**，兼容秒值）；`submission=false` 仅记 now-playing（MVP 内存）；10s 去重见 docs/03 §2.8 |
 | `stream` | 播放流 | 复用 StreamService；`maxBitRate`/`format`/`timeOffset`（映射到第一方断点续播）；Range 直传 |
 | `download` | 原文件 | |
 | `getCoverArt` | 封面 | `al-/tr-/ar-/pl-` 前缀 ID（song 的 coverArt 为 `tr-`：自身内嵌 → 专辑链兜底）；`size=` 缩放 P1 |

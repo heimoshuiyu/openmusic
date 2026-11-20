@@ -31,19 +31,19 @@ A0 工具面+Port（无 LLM） ──▶ A1 内嵌 OpenCode 宿主 ──▶ A2 
 ## M1 — 扫描器 + 浏览/搜索 API（2~4 天）✅ 2026-09-15
 
 - [x] music-folders CRUD + 扫描触发/状态端点
-- [ ] ScannerService：遍历/diff/元数据提取/封面/物化计数（02 §5）
-- [ ] repo 层 + browse 端点（artists/albums/tracks/genres/random）
-- [ ] pg_trgm 索引 + `/search`
+- [x] ScannerService：遍历/diff/元数据提取/封面/物化计数（02 §5）
+- [x] repo 层 + browse 端点（artists/albums/tracks/genres/random）
+- [x] pg_trgm 索引 + `/search`
 - [x] fixture 音乐文件（几首多格式）+ 扫描集成测试（ffmpeg 生成 CJK 标签曲库）
 - **验收**：浏览/搜索响应 <100ms ✅（fixture 级验证；大库压测顺延到 MVP 发布前）
 
 ## M2 — 认证 + 流播放（2~3 天）✅ 2026-09-15
 
-- [ ] users/sessions 表启用，`Bun.password` argon2，login/logout/me，会话中间件，首启管理员引导
-- [ ] users 管理 API 🔒
-- [ ] StreamService：直传（含 Range）、ffmpeg 转码管道、`/tmp` 缓存 + LRU 淘汰 Fiber、并发信号量
-- [ ] `/tracks/:id/stream|download`、`/covers/:id`（内嵌封面提取落盘）
-- [ ] 转码参数映射单测（format×bitrate → ffmpeg args）
+- [x] users/sessions 表启用，`Bun.password` argon2，login/logout/me，会话中间件，首启管理员引导
+- [x] users 管理 API 🔒
+- [x] StreamService：直传（含 Range）、ffmpeg 转码管道、`/tmp` 缓存 + LRU 淘汰 Fiber、并发信号量
+- [x] `/tracks/:id/stream|download`、`/covers/:id`（内嵌封面提取落盘）
+- [x] 转码参数映射（format×bitrate → ffmpeg args；行为由集成测试覆盖，专项单测未拆）
 - **验收**：curl 带 Range/转码参数拿到正确字节流；并发 8 路转码不超上限；缓存目录被 LRU 控制在配额内
 
 ## M3 — Subsonic 兼容层（2~3 天）✅ 2026-09-15
@@ -85,7 +85,7 @@ A0 工具面+Port（无 LLM） ──▶ A1 内嵌 OpenCode 宿主 ──▶ A2 
 
 ## M6 — CUE 整轨虚拟分轨 + 超长时长加固 ✅ 2026-09-18
 
-- **CUE 虚拟分轨**（docs/03 §2.8）：整轨镜像 + cue → 虚拟曲目（合成键 + offset_ms
+- **CUE 虚拟分轨**（docs/03 §2.9）：整轨镜像 + cue → 虚拟曲目（合成键 + offset_ms
   分段），扫描判定/编码回退链（Shift-JIS/GB 系）/边界播放（-t 卡终点）/统计/
   cue 增删自然迁移全链路；分轨自带 cue 与引用缺失镜像的 cue 无害跳过
 - **超长时长加固**：ogg/opus 时长重解析兜底（快速模式不 seek 尾部 granule）；
@@ -120,7 +120,7 @@ A0 工具面+Port（无 LLM） ──▶ A1 内嵌 OpenCode 宿主 ──▶ A2 
 0. **扫描删除实体时级联清理 annotations/plays 孤儿**（读取侧已由 `starredIds` 的 exists 过滤兜底）
 
 1. **shares**：公开分享链接（无鉴权只读 stream/封面，带过期）
-2. **歌词**：lrc 文件 + 内嵌歌词解析；通告 `songLyrics` 扩展 + getLyricsBySongId；前端滚动歌词
+2. **歌词**：主体已完成——sidecar lrc + 内嵌标签解析（`USLT`/`SYLT`）、绑定/编辑 API（0012 迁移，docs/04 歌词组）、AI 助手 MCP 编辑、前端歌词面板；剩余：Subsonic `songLyrics` 通告 + `getLyricsBySongId`（当前经典 `getLyrics` 回空结构）
 3. **gapless**：双 audio 元素预加载切换
 4. **服务端播放队列**：`play_queues` 表 + getPlayQueue/savePlayQueue + 通告 `indexBasedQueue`（ByIndex 变体）
 5. **reportPlayback** + now-playing 列表
@@ -147,5 +147,5 @@ A0 工具面+Port（无 LLM） ──▶ A1 内嵌 OpenCode 宿主 ──▶ A2 
 ## 开发节奏约定
 
 - 主分支 + 短生命周期分支；提交信息 conventional commits
-- 每个 PR：`bun run check`（tsc + lint + format）+ `bun test` 通过
+- 每个 PR：`bun run check`（tsc --noEmit）+ `bun test` 通过
 - 数据库 schema 变更只走新迁移文件，禁止改历史迁移

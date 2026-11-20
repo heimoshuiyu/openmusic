@@ -100,3 +100,5 @@ API 形状不变，前端无感。
 - `04-api-design.md` —— 第一方 API 规范
 - `05-subsonic-compat.md` —— Feishin 调研结论与兼容层规范
 - `06-roadmap.md` —— 里程碑拆解与验收标准
+- `07-runbook.md` —— 运行手册：启动/凭据/备份/排障
+- `08-ai-agent.md` —— AI 音乐助手：vendored OpenCode SDK 集成与工具面
