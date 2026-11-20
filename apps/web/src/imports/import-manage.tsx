@@ -124,6 +124,10 @@ export function ImportManageMenu({ trackId, label }: { trackId: string; label: s
       const updated = await api.neteaseEdit(trackId, tags)
       setInfo(updated); setPhase("view")
       setNote(updated.warnings && updated.warnings.length ? `已保存。${updated.warnings.join(" ")}` : "已保存。")
+      // 编辑改的是曲库可见字段（标题/艺人/流派…）：失效曲库查询让 /tracks 等活跃视图
+      // 无需 reload 即刷新——与 unindex/导入成功同款全量失效（只作用于挂载中的查询），
+      // 弹层的即时结果与 warnings 已在上一行先行落位
+      await queryClient.invalidateQueries()
     } catch (cause) {
       setNote(cause instanceof Error && cause.message ? cause.message : "保存失败，请稍后重试。")
     } finally {

@@ -115,3 +115,27 @@ test("重复的 failures/warnings（同歌单内同 songId 出现两次）全数
   const body = renderToStaticMarkup(<NeteaseInfoBody info={{ ...info, warnings: ["未取得歌词。", "未取得歌词。"] }} />)
   expect(body.match(/未取得歌词。/g)).toHaveLength(2)
 })
+
+test("元数据编辑成功后失效曲库查询：/tracks 行无需 reload 即刷新（静态结构断言）", async () => {
+  // 仓库测试栈无 jsdom：invalidation 是 React Query 副作用，无法无头断言其效果，
+  // 这里以源码结构断言表达回归——真实浏览器证据见 om-accept-report steps 29-32
+  //（修复前 rowInvalidatedByEdit:false，reload 才更新；修复后应即时刷新）。
+  const source = await Bun.file(new URL("../src/imports/import-manage.tsx", import.meta.url)).text()
+  const saveTags = /^  async function saveTags\(tags: NeteaseTags\) \{[\s\S]*?\n  \}/m.exec(source)?.[0]
+  expect(saveTags).toBeDefined()
+  const edit = saveTags!.indexOf("await api.neteaseEdit(")
+  const updated = saveTags!.indexOf("setInfo(updated)")
+  const saved = saveTags!.indexOf("已保存。")
+  const invalidate = saveTags!.indexOf("await queryClient.invalidateQueries()")
+  expect(edit).toBeGreaterThanOrEqual(0)
+  // 弹层即时结果（更新后的 info 与 warnings 文案）先落位，随后才失效曲库查询；
+  // 失效缺失或顺序错乱（编辑前失效）都会让以下断言失败
+  expect(invalidate).toBeGreaterThan(edit)
+  expect(invalidate).toBeGreaterThan(updated)
+  expect(invalidate).toBeGreaterThan(saved)
+  // 空改动提前返回：不触发网络请求，也不失效
+  expect(saveTags).toContain("没有改动需要保存。")
+  // 移出库路径的既有失效保持不回归
+  const unindex = /^  async function unindex\(\) \{[\s\S]*?\n  \}/m.exec(source)?.[0]
+  expect(unindex).toContain("await queryClient.invalidateQueries()")
+})
