@@ -89,7 +89,13 @@ fun AlbumScreen(id: String, actions: UiActions) {
 
     when {
       album == null && albumState.error == null -> LoadingView(Modifier.align(Alignment.Center))
-      album == null -> ErrorView(albumState.error ?: "", retry = null, modifier = Modifier.align(Alignment.Center))
+      // 专辑已不在（例如其中唯一曲目刚被移出曲库）：给出人话与可见的返回，而不是裸 404 死胡同
+      album == null -> Column(Modifier.fillMaxSize()) {
+        Box(Modifier.padding(horizontal = 12.dp)) { DetailTopBar("", onBack = { back?.onBackPressed() }) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+          ErrorView("这张专辑已不在曲库中（可能它的曲目都已被移出）。", retry = null, modifier = Modifier.align(Alignment.Center))
+        }
+      }
       else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
           Column(Modifier.padding(top = 6.dp)) {
@@ -201,7 +207,13 @@ fun ArtistScreen(id: String, actions: UiActions) {
   Box(Modifier.fillMaxSize()) {
     when {
       artist == null && artistState.error == null -> LoadingView(Modifier.align(Alignment.Center))
-      artist == null -> ErrorView(artistState.error ?: "", retry = null, modifier = Modifier.align(Alignment.Center))
+      // 艺人已不在（例如其唯一曲目刚被移出曲库）：给出人话与可见的返回
+      artist == null -> Column(Modifier.fillMaxSize()) {
+        Box(Modifier.padding(horizontal = 12.dp)) { DetailTopBar("", onBack = { back?.onBackPressed() }) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+          ErrorView("这位艺人已不在曲库中（可能其曲目都已被移出）。", retry = null, modifier = Modifier.align(Alignment.Center))
+        }
+      }
       else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
       item {
         Column(Modifier.statusBarsPadding().padding(top = 6.dp)) {

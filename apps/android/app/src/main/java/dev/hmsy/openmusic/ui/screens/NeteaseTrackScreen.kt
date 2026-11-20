@@ -43,15 +43,21 @@ import dev.hmsy.openmusic.OpenMusicApp
 import dev.hmsy.openmusic.core.Om
 import dev.hmsy.openmusic.core.OmType
 import dev.hmsy.openmusic.data.ApiError
+import dev.hmsy.openmusic.data.NETEASE_REMOVED_GUIDANCE
 import dev.hmsy.openmusic.data.NeteaseDeletionRequest
 import dev.hmsy.openmusic.data.NeteaseDeletionReview
 import dev.hmsy.openmusic.data.NeteaseInfo
+import dev.hmsy.openmusic.data.NeteaseTrackState
 import dev.hmsy.openmusic.data.formatSizeBytes
 import dev.hmsy.openmusic.data.neteaseCoverUrlOk
 import dev.hmsy.openmusic.data.neteaseLabelOk
 import dev.hmsy.openmusic.data.neteasePositionTextOk
+import dev.hmsy.openmusic.data.neteaseRemovedFileLine
 import dev.hmsy.openmusic.data.neteaseTagsFormOk
 import dev.hmsy.openmusic.data.neteaseTagsPatch
+import dev.hmsy.openmusic.data.neteaseTrackState
+import dev.hmsy.openmusic.data.neteaseTrackUnreachableMessage
+import dev.hmsy.openmusic.data.neteaseUnindexDialogBody
 import dev.hmsy.openmusic.ui.icons.OmIcons
 import dev.hmsy.openmusic.ui.components.DetailTopBar
 import dev.hmsy.openmusic.ui.components.ErrorView
@@ -81,6 +87,8 @@ fun NeteaseTrackScreen(trackId: String, onBack: () -> Unit) {
   var info by remember { mutableStateOf<NeteaseInfo?>(null) }
   var failure by remember { mutableStateOf<Pair<Int, String>?>(null) }
   var reload by remember { mutableIntStateOf(0) }
+  // 移出成功终态：只记录展示值，不再发任何已知会 404 的 info 请求，也不把成功当失败
+  var removed by remember { mutableStateOf<String?>(null) }
 
   LaunchedEffect(trackId, reload) {
     info = null
@@ -100,26 +108,46 @@ fun NeteaseTrackScreen(trackId: String, onBack: () -> Unit) {
       .verticalScroll(rememberScrollState()),
   ) {
     Box(Modifier.padding(horizontal = 12.dp)) { DetailTopBar("网易云来源 · 管理", onBack) }
-    val fail = failure
-    val loaded = info
-    when {
-      loaded == null && fail == null -> LoadingView(Modifier.fillMaxWidth())
-      fail != null -> ErrorView(
-        message = if (fail.first == 404) {
-          "这首歌不是网易云导入的曲目（或已不在库中）。「网易云来源」只对网易云导入的曲目开放。"
-        } else {
-          fail.second
-        },
-        retry = { reload++ },
+    when (val state = neteaseTrackState(info, failure, removed)) {
+      is NeteaseTrackState.Loading -> LoadingView(Modifier.fillMaxWidth())
+      is NeteaseTrackState.Unreachable -> ErrorView(
+        message = neteaseTrackUnreachableMessage(state.status, state.message),
+        // 404 是终态（非网易云曲目/已移出）：重试只会再发一次已知会 404 的请求
+        retry = if (state.status == 404) null else ({ reload++ }),
         modifier = Modifier.fillMaxWidth(),
       )
-      loaded != null -> {
-        NeteaseSourceSection(loaded)
-        NeteaseTagsSection(loaded, onSaved = { info = it })
+      is NeteaseTrackState.Ready -> {
+        NeteaseSourceSection(state.info)
+        NeteaseTagsSection(state.info, onSaved = { info = it })
         Spacer(Modifier.height(8.dp))
-        NeteaseDangerSection(loaded, onRemoved = onBack)
+        NeteaseDangerSection(state.info, onRemoved = { removed = state.info.filename })
       }
+      is NeteaseTrackState.Removed -> NeteaseRemovedCard(state.filename, onBack)
     }
+  }
+}
+
+/** 移出成功终态卡：明确的成功展示 + 返回出口（替代先前直接 pop 回到可能已失效的上级页） */
+@Composable
+private fun NeteaseRemovedCard(filename: String, onBack: () -> Unit) {
+  Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Icon(OmIcons.Check, contentDescription = null, tint = Om.Accent, modifier = Modifier.size(30.dp))
+    Spacer(Modifier.height(10.dp))
+    Text("已移出曲库", style = OmType.Title, color = Om.Paper)
+    Spacer(Modifier.height(6.dp))
+    Text(neteaseRemovedFileLine(filename), style = OmType.Readout, color = Om.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Spacer(Modifier.height(6.dp))
+    Text(
+      NETEASE_REMOVED_GUIDANCE,
+      style = OmType.Meta, color = Om.Faint,
+      modifier = Modifier.padding(horizontal = 8.dp),
+    )
+    Spacer(Modifier.height(18.dp))
+    Button(
+      onClick = onBack,
+      colors = ButtonDefaults.buttonColors(containerColor = Om.Paper, contentColor = Om.Shell),
+      shape = RoundedCornerShape(2.dp),
+    ) { Text("返回", style = OmType.Row) }
   }
 }
 
@@ -524,24 +552,15 @@ private fun NeteaseDangerSection(info: NeteaseInfo, onRemoved: () -> Unit) {
         Column {
           Text("将把「${info.title}」从曲库索引中移除。", style = OmType.Body, color = Om.Paper)
           Spacer(Modifier.height(8.dp))
-          Text(
-            "· 磁盘文件保留不动（${info.filename}）\n· 播放记录保留（曲目从各列表消失）\n· 之后可重新扫描目录或再次导入恢复",
-            style = OmType.Meta, color = Om.Dim,
-          )
+          Text(neteaseUnindexDialogBody(info.filename), style = OmType.Meta, color = Om.Dim)
         }
       },
       confirmButton = {
         TextButton(
           onClick = {
             showUnindex = false
-            runFlow(
-              "unindex",
-              { OpenMusicApp.api.neteaseUnindex(info.trackId) },
-              {
-                Toast.makeText(context, "已移出曲库；文件保留。", Toast.LENGTH_SHORT).show()
-                onRemoved()
-              },
-            )
+            // 成功 = 屏内终态卡（不再 pop 回可能因专辑清空而失效的上级页，也不再重发 info）
+            runFlow("unindex", { OpenMusicApp.api.neteaseUnindex(info.trackId) }, { onRemoved() })
           },
         ) { Text("确认移出", color = Om.Danger) }
       },

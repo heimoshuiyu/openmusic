@@ -155,6 +155,56 @@ fun neteaseTagsFormOk(
     (genre.isBlank() || neteaseLabelOk(genre)) &&
     neteasePositionTextOk(trackText) && neteasePositionTextOk(discText)
 
+// ── 移出曲库：状态机与文案（纯函数，屏幕据此渲染）────────────────
+
+/** 网易云来源管理屏状态：移出成功是显式终态，优先于任何残留的加载失败（成功不当失败展示） */
+sealed interface NeteaseTrackState {
+  data object Loading : NeteaseTrackState
+  data class Ready(val info: NeteaseInfo) : NeteaseTrackState
+  /** 已移出曲库：filename 仅为展示；此状态下不再发任何 info 请求 */
+  data class Removed(val filename: String) : NeteaseTrackState
+  /** 拿不到来源信息（status 0 = 非 ApiError 的未知失败） */
+  data class Unreachable(val status: Int, val message: String) : NeteaseTrackState
+}
+
+fun neteaseTrackState(
+  loaded: NeteaseInfo?,
+  failure: Pair<Int, String>?,
+  removed: String?,
+): NeteaseTrackState = when {
+  removed != null -> NeteaseTrackState.Removed(removed)
+  failure != null -> NeteaseTrackState.Unreachable(failure.first, failure.second)
+  loaded != null -> NeteaseTrackState.Ready(loaded)
+  else -> NeteaseTrackState.Loading
+}
+
+/** 404 保持既有友好文案（不回退）；其他错误原样透传服务器文案 */
+fun neteaseTrackUnreachableMessage(status: Int, message: String): String =
+  if (status == 404) {
+    "这首歌不是网易云导入的曲目（或已不在库中）。「网易云来源」只对网易云导入的曲目开放。"
+  } else {
+    message
+  }
+
+/**
+ * 移出确认对话框正文——按服务端真实语义：
+ * 移除会写入 library_exclusions 排除记录，因此扫描（增量或强制）不会自动把它捡回；
+ * 文件在磁盘上保留时再次导入只会报「文件存在，但未找到已入库的曲目」，
+ * 恢复入库必须先删除/移走该文件，重新下载入库时才清除排除记录。
+ */
+fun neteaseUnindexDialogBody(filename: String): String =
+  "· 磁盘文件保留不动（$filename）\n" +
+    "· 播放记录保留（曲目从各列表消失）\n" +
+    "· 之后的增量/强制扫描不会自动把它捡回（已写入目录排除记录）\n" +
+    "· 想恢复入库：删除或移走该文件后再次导入（重新下载入库时会清除排除记录）"
+
+/** 移出成功终态卡的文件行 */
+fun neteaseRemovedFileLine(filename: String): String = "原文件保留：$filename"
+
+/** 移出成功终态卡的指引（与对话框同一语义） */
+const val NETEASE_REMOVED_GUIDANCE: String =
+  "之后的扫描不会自动把它捡回；想恢复入库需先删除或移走该文件，再次导入时清除排除记录。"
+
 // ── 元数据 PATCH 载荷计算（纯函数，表单与服务端语义的唯一裁决点）────────
 
 /** PATCH 载荷：字段 null = 保持不变（不发送）。unsupportedClears = 用户想清空、
